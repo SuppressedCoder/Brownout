@@ -65,7 +65,7 @@ function wattFields(primary: LogEntry | undefined): string[] {
  * The battery graph of Quick Look and Power: voltage and total current when logged.
  * Without them, each motor's current, which many teams log even when they don't log the battery.
  */
-function batteryGraph(primary: LogEntry | undefined): { settings: Partial<GraphSettings>; title: string } {
+export function batteryGraph(primary: LogEntry | undefined): { settings: Partial<GraphSettings>; title: string } {
   const v = present(primary, [roleKey(primary, 'batteryVoltage')]);
   const i = present(primary, [roleKey(primary, 'totalCurrent')]);
   if (v.length || i.length) {

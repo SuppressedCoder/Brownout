@@ -69,7 +69,11 @@ export interface SessionState {
   timelineTracks: string[];
   /** The timeline covers the whole log; false = only the match (auto start to teleop end), when the logs have one. */
   wholeLog: boolean;
+  /** Which view fills the window: the panel grid, Video review or Power. */
+  view: AppView;
 }
+
+export type AppView = 'panels' | 'video' | 'power';
 
 export interface LoadingItem {
   id: string;
@@ -98,6 +102,7 @@ export const sessionStore = createStore<SessionState>({
   timelineHeight: null,
   timelineTracks: [],
   wholeLog: false,
+  view: 'panels',
 });
 
 let nextLogId = 1;

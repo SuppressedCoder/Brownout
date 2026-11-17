@@ -11,7 +11,7 @@
 import { sessionStore, type LogEntry } from '../state/session';
 import { videoStore, setVideo } from '../state/videos';
 import { toast, uiStore } from '../state/ui';
-import { panelStore, updatePanel, type VideoSettings } from '../state/panels';
+import { panelStore, updatePanel, isViewPanel, VIEW_PANEL_PREFIX, type VideoSettings } from '../state/panels';
 import { grid } from '../components/Grid';
 import { logMatchKey, rankVideos, type VideoCandidate } from '@core/videoMatch';
 
@@ -53,8 +53,14 @@ export async function useVideoFor(log: LogEntry, c: VideoCandidate): Promise<boo
     return false;
   }
   setVideo(log.fileName, { path: f.path, name: f.name, logMinusVideo: null }, f.url);
-  // a video panel showing this log: one already set to it, else one whose log has no video, else a new one
-  const panels = Object.entries(panelStore.get().panels).filter(([, p]) => p.type === 'video') as [string, VideoSettings][];
+  // in the Video review view, show it there
+  if (sessionStore.get().view === 'video') {
+    updatePanel<VideoSettings>(`${VIEW_PANEL_PREFIX}video`, { logId: log.id });
+    uiStore.set({ videoSyncFor: log.id });
+    return true;
+  }
+  // a video panel in the grid showing this log: one already set to it, else one whose log has no video, else a new one
+  const panels = Object.entries(panelStore.get().panels).filter(([id, p]) => p.type === 'video' && !isViewPanel(id)) as [string, VideoSettings][];
   const logs = sessionStore.get().logs;
   const logOf = (p: VideoSettings) => logs.find((l) => l.id === p.logId) ?? logs[0];
   const byLog = videoStore.get().byLog;

@@ -648,9 +648,19 @@ async function main() {
   await page.locator('.selection-bar .link-btn', { hasText: 'Clear' }).click();
 
   console.log('Power by subsystem');
+  const presetBeforeViews = await presetText(page);
   await page.locator('[data-testid=power-btn]').click();
   await page.waitForSelector('.power-panel');
-  check('the Power button opens the power report', (await page.locator('.power-panel').count()) === 1);
+  check('the Power button opens the Power view with the power report', (await page.locator('[data-testid=power-view] .power-panel').count()) === 1);
+  check(
+    '...the panel grid steps aside, and Add panel with it',
+    !(await page.locator('.grid-wrap').isVisible()) && (await page.locator('[data-testid=add-panel]').count()) === 0,
+  );
+  check(
+    '...and a battery graph sits above the report',
+    (await page.locator('[data-view-panel="view:battery"] canvas').count()) === 1 &&
+      (await state<number>(page, `s.panelStore.get().panels['view:battery'].series.length`)) > 0,
+  );
   check('with no subsystems it explains what to do', (await page.locator('[data-testid=subsystems-empty]').count()) === 1);
   await page.locator('[data-testid=subsystems-empty] .btn').click();
   await page.waitForSelector('[data-testid=subsystem-editor]');
@@ -730,6 +740,14 @@ async function main() {
   check(
     'battery health shows resistance and a rating',
     (await page.locator('.battery-table .rating').count()) === 2 && /mΩ/.test(await page.locator('.battery-table').innerText()),
+  );
+  await page.screenshot({ path: resolve(outDir, 'ui-view-power.png') });
+  await page.keyboard.press('Control+1');
+  await page.waitForTimeout(300);
+  check(
+    'Ctrl+1 brings the panels back as they were',
+    (await page.locator('.grid-wrap').isVisible()) && (await presetText(page)) === presetBeforeViews,
+    await presetText(page),
   );
 
   console.log('Robot profile');
@@ -1500,6 +1518,7 @@ async function main() {
     'the power report is ready without any setup',
     (await page.locator('[data-testid=brownout-card]').first().innerText()).includes('Biggest draw: Elevator'),
   );
+  await page.locator('[data-testid=view-panels]').click();
   check('the custom field picture persisted', (await state<number>(page, 's.sessionStore.get().customFields.length')) === 1);
   await page.locator('[data-testid=add-panel]').click();
   await page.locator('.menu .menu-item', { hasText: 'Video' }).click();
@@ -1529,7 +1548,9 @@ async function main() {
   await page.waitForSelector('[data-testid=commands-chart]');
   await page.evaluate(`window.__brownout.timeStore.set({ cursor: 44 })`);
   await page.waitForTimeout(1200);
-  const replayTypes = Object.values(await state<Record<string, { type: string }>>(page, 's.panelStore.get().panels'))
+  const replayTypes = Object.entries(await state<Record<string, { type: string }>>(page, 's.panelStore.get().panels'))
+    .filter(([id]) => !id.startsWith('view:'))
+    .map(([, p]) => p)
     .map((p) => p.type)
     .sort()
     .join();
@@ -1539,6 +1560,41 @@ async function main() {
     (await state<string[]>(page, 's.sessionStore.get().timelineTracks')).filter((k) => k.endsWith('/TagsSeen')).length === 2,
   );
   await page.screenshot({ path: resolve(outDir, 'ui-replay.png') });
+
+  console.log('Video review');
+  await page.keyboard.press('Control+2');
+  await page.waitForSelector('[data-testid=video-review]');
+  await page.waitForTimeout(600);
+  {
+    const vb = await page.locator('[data-view-panel="view:video"]').boundingBox();
+    const fb = await page.locator('[data-view-panel="view:field"]').boundingBox();
+    check(
+      'the video and the field sit side by side at the same height',
+      !!vb && !!fb && Math.abs(vb.y - fb.y) < 2 && Math.abs(vb.height - fb.height) < 2 && fb.x > vb.x + vb.width - 2,
+      JSON.stringify({ vb, fb }),
+    );
+    check(
+      'the field shows the log whose video it is',
+      (await state<string>(page, `s.panelStore.get().panels['view:field'].source`)) === (await state<string>(page, 's.sessionStore.get().logs[0].id')),
+    );
+    const items = await page.locator('[data-testid=video-review-item]').allInnerTexts();
+    check(
+      'the moments to check list the camera disagreement and the position jump',
+      items.some((x) => x.includes('Camera 0 was')) && items.some((x) => x.includes('Robot position jumped')),
+      items.join(' | '),
+    );
+    const jumpRow = page.locator('[data-testid=video-review-item]', { hasText: 'Robot position jumped' }).first();
+    await jumpRow.click();
+    const want = await state<number>(
+      page,
+      `(() => { const l = s.sessionStore.get().logs[0]; const e = l.events.find(e => e.kind === 'vision' && e.finding.kind === 'jump'); return e.t + l.offset; })()`,
+    );
+    check('clicking a moment goes there', Math.abs((await state<number>(page, 's.timeStore.get().cursor')) - want) < 1e-6);
+    await page.screenshot({ path: resolve(outDir, 'ui-view-video.png') });
+    check('no emoji in the Video review', (await pictographs(page)) === '', await pictographs(page));
+  }
+  await page.keyboard.press('Control+1');
+  await page.waitForTimeout(300);
   check('no renderer errors after restore', errors.length === 0, errors.slice(0, 3).join(' | '));
   await app.close();
 

@@ -16,7 +16,8 @@ export async function exportCsv(): Promise<string> {
   else if (ps?.type === 'table') keys = ps.keys;
   else if (ps?.type === 'stats' && ps.key) keys = [ps.key];
   if (!keys.length) {
-    for (const p of Object.values(panels)) {
+    for (const [id, p] of Object.entries(panels)) {
+      if (id.startsWith('view:') && sessionStore.get().view === 'panels') continue;
       if (p.type === 'graph') keys.push(...p.series.map((s) => s.key));
       if (p.type === 'table') keys.push(...p.keys);
     }

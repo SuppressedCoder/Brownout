@@ -22,6 +22,7 @@ export interface Prefs {
   brownoutThreshold: number;
   tagVariant: string;
   wholeLog: boolean;
+  view: string;
 }
 
 let timer: number | undefined;
@@ -44,6 +45,7 @@ function scheduleSave() {
         brownoutThreshold: s.brownoutThreshold,
         tagVariant: s.tagVariant,
         wholeLog: s.wholeLog,
+        view: s.view,
       };
       localStorage.setItem(PREFS, JSON.stringify(prefs));
     } catch (e) {
@@ -80,6 +82,7 @@ export function loadPrefs(): void {
       brownoutThreshold: p.brownoutThreshold ?? 6.75,
       tagVariant: p.tagVariant === 'andymark' ? 'andymark' : 'welded',
       wholeLog: p.wholeLog === true,
+      view: p.view === 'video' || p.view === 'power' ? p.view : 'panels',
     });
     if (p.timeFormat) timeStore.set({ timeFormat: p.timeFormat as never });
   } catch {

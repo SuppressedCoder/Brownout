@@ -3,7 +3,7 @@
  * registry. Keybinds (Settings, Keybinds) and the help sheet are generated
  * from this list.
  */
-import { sessionStore, addBookmark, closeAll } from '../state/session';
+import { sessionStore, addBookmark, closeAll, type AppView } from '../state/session';
 import { timeStore, setPlaying, stepCursor, zoomTo, zoomBy, jumpPhase, setCursor } from '../state/time';
 import { settingsStore, updateSettings } from '../state/settings';
 import { uiStore, askText, openSettings, toast } from '../state/ui';
@@ -51,6 +51,11 @@ export function togglePotato(): void {
   const on = !settingsStore.get().potato;
   updateSettings({ potato: on });
   toast(on ? 'Potato mode on: lower detail, faster drawing.' : 'Potato mode off.');
+}
+
+/** Switch the window between the panel grid and the Video review and Power views. */
+export function showView(view: AppView): void {
+  sessionStore.set({ view });
 }
 
 export const ACTIONS: Action[] = [
@@ -122,12 +127,15 @@ export const ACTIONS: Action[] = [
     run: () => sessionStore.set((s) => ({ sidebarOpen: !s.sidebarOpen })),
   },
   { id: 'cycleTimeline', label: 'Cycle timeline height', group: 'View', defaultKey: 'Ctrl+T', run: cycleTimeline },
+  { id: 'viewPanels', label: 'Show the panels', group: 'View', defaultKey: 'Ctrl+1', run: () => showView('panels') },
+  { id: 'viewVideo', label: 'Show Video review', group: 'View', defaultKey: 'Ctrl+2', run: () => showView('video') },
+  { id: 'viewPower', label: 'Show the Power view', group: 'View', defaultKey: 'Ctrl+3', run: () => showView('power') },
   { id: 'maximizePanel', label: 'Maximize / restore the active panel', group: 'View', defaultKey: 'Ctrl+Enter', run: () => grid.toggleMaximize() },
   { id: 'potato', label: 'Toggle Potato mode', group: 'View', defaultKey: 'Ctrl+Shift+P', run: togglePotato },
   { id: 'settings', label: 'Settings', group: 'View', defaultKey: 'Ctrl+,', run: () => openSettings() },
   { id: 'help', label: 'Shortcuts and tips', group: 'View', defaultKey: '?', run: () => uiStore.set((s) => ({ helpOpen: !s.helpOpen })) },
 
-  { id: 'power', label: 'Power by subsystem', group: 'Robot', defaultKey: 'P', run: () => void grid.showPanel('power') },
+  { id: 'power', label: 'Power view', group: 'Robot', defaultKey: 'P', run: () => showView('power') },
   { id: 'robot', label: 'Robot profile…', group: 'Robot', defaultKey: '', run: () => openSettings('robot') },
 ];
 

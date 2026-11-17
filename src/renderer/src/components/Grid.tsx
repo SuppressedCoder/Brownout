@@ -7,6 +7,7 @@ import { DockviewReact, type DockviewReadyEvent, type IDockviewPanelProps, type 
 import { themeDark, themeLight, type DockviewApi, type SerializedDockview, type AddPanelOptions } from 'dockview';
 import {
   panelStore,
+  isViewPanel,
   ensurePanel,
   removePanelSettings,
   newPanelId,
@@ -50,6 +51,11 @@ export interface SavedLayout {
 }
 
 let api: DockviewApi | null = null;
+
+/** The settings of the views' own panels, which layouts never touch. */
+function viewPanelsOnly(): Record<string, PanelSettings> {
+  return Object.fromEntries(Object.entries(panelStore.get().panels).filter(([id]) => isViewPanel(id)));
+}
 const layoutListeners = new Set<() => void>();
 /** Whether one panel fills the grid right now (dockview's maximized group). */
 export const maximizedStore = createStore({ maximized: false });
@@ -66,18 +72,19 @@ export const grid = {
   },
   clear() {
     api?.clear();
-    panelStore.set({ panels: {} });
+    panelStore.set({ panels: viewPanelsOnly() });
   },
   save(): SavedLayout | null {
     if (!api) return null;
-    return { version: 1, dock: api.toJSON(), panels: panelStore.get().panels, timelineTracks: sessionStore.get().timelineTracks };
+    const panels = Object.fromEntries(Object.entries(panelStore.get().panels).filter(([id]) => !isViewPanel(id)));
+    return { version: 1, dock: api.toJSON(), panels, timelineTracks: sessionStore.get().timelineTracks };
   },
   load(layout: SavedLayout) {
     if (!api) return;
     // Clear first: removing the old panels drops their settings, which must not
     // hit the incoming ones when a layout with the same panel ids is reloaded.
     api.clear();
-    panelStore.set({ panels: structuredClone(layout.panels) });
+    panelStore.set({ panels: { ...viewPanelsOnly(), ...structuredClone(layout.panels) } });
     try {
       api.fromJSON(structuredClone(layout.dock));
     } catch (e) {
@@ -129,7 +136,7 @@ function wrap(Comp: React.FC<{ id: string }>): React.FC<IDockviewPanelProps> {
 /** Panels narrower than this use compact view (fewer toolbar buttons, collapsed chips). */
 const COMPACT_BELOW = 520;
 
-function PanelFrame({ id, Comp }: { id: string; Comp: React.FC<{ id: string }> }) {
+function PanelFrame({ id, Comp, standalone }: { id: string; Comp: React.FC<{ id: string }>; standalone?: boolean }) {
   const has = useStore(panelStore, (s) => !!s.panels[id]);
   const maximized = useStore(maximizedStore, (s) => s.maximized);
   const ref = useRef<HTMLDivElement>(null);
@@ -162,17 +169,19 @@ function PanelFrame({ id, Comp }: { id: string; Comp: React.FC<{ id: string }> }
       <CompactContext.Provider value={compact}>
         <Comp id={id} />
       </CompactContext.Provider>
-      <button
-        className={`max-btn${maximized ? ' on' : ''}`}
-        title={
-          maximized ? 'Show all panels again (double-click the tab, or Ctrl+Enter)' : 'Fill the grid with this panel (double-click the tab, or Ctrl+Enter)'
-        }
-        aria-label={maximized ? 'Restore the panels' : 'Maximize this panel'}
-        data-testid="panel-maximize"
-        onClick={() => grid.toggleMaximize(id)}
-      >
-        <Icon name={maximized ? 'restore' : 'maximize'} size={13} />
-      </button>
+      {!standalone && (
+        <button
+          className={`max-btn${maximized ? ' on' : ''}`}
+          title={
+            maximized ? 'Show all panels again (double-click the tab, or Ctrl+Enter)' : 'Fill the grid with this panel (double-click the tab, or Ctrl+Enter)'
+          }
+          aria-label={maximized ? 'Restore the panels' : 'Maximize this panel'}
+          data-testid="panel-maximize"
+          onClick={() => grid.toggleMaximize(id)}
+        >
+          <Icon name={maximized ? 'restore' : 'maximize'} size={13} />
+        </button>
+      )}
       <button
         className="capture-btn"
         title="Copy this panel as an image (Shift-click to save a PNG)"
@@ -185,21 +194,34 @@ function PanelFrame({ id, Comp }: { id: string; Comp: React.FC<{ id: string }> }
   );
 }
 
-const components: Record<PanelType, React.FC<IDockviewPanelProps>> = {
-  graph: wrap(GraphPanel),
-  table: wrap(TablePanel),
-  console: wrap(ConsolePanel),
-  field: wrap(FieldPanel),
-  stats: wrap(StatsPanel),
-  power: wrap(PowerPanel),
-  paths: wrap(PathsPanel),
-  compare: wrap(ComparePanel),
-  info: wrap(InfoPanel),
-  swerve: wrap(SwervePanel),
-  controller: wrap(ControllerPanel),
-  commands: wrap(CommandsPanel),
-  video: wrap(VideoPanel),
+const RAW: Record<PanelType, React.FC<{ id: string }>> = {
+  graph: GraphPanel,
+  table: TablePanel,
+  console: ConsolePanel,
+  field: FieldPanel,
+  stats: StatsPanel,
+  power: PowerPanel,
+  paths: PathsPanel,
+  compare: ComparePanel,
+  info: InfoPanel,
+  swerve: SwervePanel,
+  controller: ControllerPanel,
+  commands: CommandsPanel,
+  video: VideoPanel,
 };
+
+const components = Object.fromEntries(Object.entries(RAW).map(([k, c]) => [k, wrap(c)])) as Record<PanelType, React.FC<IDockviewPanelProps>>;
+
+/** A panel outside the grid, at a fixed place in a view. Its settings must exist (ensurePanel) under a view id. */
+export function StandalonePanel({ id }: { id: string }) {
+  const type = useStore(panelStore, (s) => s.panels[id]?.type);
+  if (!type) return null;
+  return (
+    <div className="standalone-panel" data-view-panel={id}>
+      <PanelFrame id={id} Comp={RAW[type]} standalone />
+    </div>
+  );
+}
 
 function Watermark(_props: IWatermarkPanelProps) {
   const logs = useStore(sessionStore, (s) => s.logs.length);
