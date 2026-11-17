@@ -30,6 +30,9 @@ for (let i = 0; i < process.argv.length; i++) {
 }
 
 if (process.env.BROWNOUT_USER_DATA) app.setPath('userData', process.env.BROWNOUT_USER_DATA);
+// Headless CI machines have no GPU; Chromium's GPU compositor can then fail to capture the page
+// ("UnknownVizError"). Software rendering is slower but always works.
+if (process.env.BROWNOUT_DISABLE_GPU) app.disableHardwareAcceleration();
 
 // Match videos play through their own scheme so the page never gets general file access:
 // the renderer only ever holds an opaque address for a file the user picked.
@@ -320,8 +323,25 @@ ipcMain.on('renderer-ready', async (_e, info: { logs: number; fields: number }) 
   if (!screenshotPath || !win) return;
   // Let canvases paint a couple of frames first.
   await new Promise((r) => setTimeout(r, 2000));
-  const img = await win.webContents.capturePage();
-  await writeFile(screenshotPath, img.toPNG());
+  // The compositor may not have a frame ready yet: try a few times, and never hang if it can't
+  let png: Buffer | null = null;
+  let lastError = '';
+  for (let attempt = 0; attempt < 5 && !png; attempt++) {
+    try {
+      const img = await win.webContents.capturePage();
+      if (!img.isEmpty()) png = img.toPNG();
+      else lastError = 'empty image';
+    } catch (e) {
+      lastError = e instanceof Error ? e.message : String(e);
+    }
+    if (!png) await new Promise((r) => setTimeout(r, 1000));
+  }
+  if (!png) {
+    console.error(`[smoke] could not capture the window: ${lastError}. On a machine without a GPU, set BROWNOUT_DISABLE_GPU=1.`);
+    app.exit(2);
+    return;
+  }
+  await writeFile(screenshotPath, png);
   console.log(`[smoke] screenshot saved to ${screenshotPath} (${info.logs} logs, ${info.fields} fields)`);
   app.quit();
 });
