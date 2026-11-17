@@ -1175,6 +1175,45 @@ async function main() {
     JSON.stringify(applied),
   );
 
+  console.log('Two-moment sync (a video whose clock runs slow)');
+  {
+    await page.locator('[data-testid=video-sync]').click();
+    await page.locator('.menu .menu-item', { hasText: 'Open the sync view' }).click();
+    await page.waitForSelector('[data-testid=video-sync-view]');
+    await page.waitForTimeout(400);
+    const rs = await state<{ auto: number; teleop: number; offset: number }>(
+      page,
+      `(() => { const l = s.sessionStore.get().logs[0]; return { auto: l.robotState.autoStart, teleop: l.robotState.teleopStart, offset: l.offset }; })()`,
+    );
+    // auto start stays paired with 0:01; teleop start shows up 2% early, as from a clock running 2% slow
+    const teleopVideo = 1 + 0.98 * (rs.teleop - rs.auto);
+    await page.locator('[data-testid=video-sync-marker-teleop]').click();
+    await page.locator('[data-testid=video-sync-scrub]').fill(teleopVideo.toFixed(3));
+    await page.waitForTimeout(300);
+    await page.locator('[data-testid=video-sync-pair]').click();
+    const twoStatus = await page.locator('[data-testid=video-sync-status]').innerText();
+    check('pairing a second moment measures the video clock', twoStatus.includes('runs 2.0% slow'), twoStatus);
+    await page.screenshot({ path: resolve(outDir, 'ui-video-sync-two.png') });
+    await page.locator('[data-testid=video-sync-apply]').click();
+    await page.waitForTimeout(200);
+    const e = await state<{ lmv: number; rate: number }>(
+      page,
+      `(() => { const l = s.sessionStore.get().logs[0]; const e = s.videoStore.get().byLog[l.fileName]; return { lmv: e.logMinusVideo, rate: e.rate }; })()`,
+    );
+    check('Apply saves the speed correction', Math.abs(e.rate - 0.98) < 0.002 && Math.abs(e.lmv - (rs.auto - 1 / e.rate)) < 0.02, JSON.stringify(e));
+    await page.evaluate(`window.__brownout.timeStore.set({ cursor: ${rs.teleop + rs.offset}, playing: false })`);
+    await page.waitForTimeout(500);
+    check('the panel shows the right frame late in the match', Math.abs((await vt()) - teleopVideo) < 0.06, `${await vt()} vs ${teleopVideo}`);
+    await page.evaluate(`window.__brownout.timeStore.set({ cursor: ${rs.auto + rs.offset + 2} })`);
+    await page.waitForTimeout(300);
+    await page.evaluate(`document.activeElement && document.activeElement.blur()`);
+    await page.keyboard.press('Space');
+    await page.waitForTimeout(700);
+    const pr = (await page.evaluate(`document.querySelector('[data-testid=video]').playbackRate`)) as number;
+    await page.keyboard.press('Space');
+    check('...and plays the video at the corrected speed', Math.abs(pr - 0.98) < 0.002, String(pr));
+  }
+
   console.log('Video offering');
   const videoDir = resolve(outDir, 'ui-videos');
   rmSync(videoDir, { recursive: true, force: true });

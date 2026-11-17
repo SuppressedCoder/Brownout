@@ -7,7 +7,10 @@
  * 3. "This frame is ..." pairs them. Playing the video then moves a line
  *    on the log strip, so you can check that robot speed rises when the
  *    robot starts moving in the video.
- * 4. Apply saves the sync (state/videos.ts: logMinusVideo = raw - video).
+ * 4. Optionally pair a second moment late in the match (teleop end). Two
+ *    pairs give the video's clock speed too, for recordings that drift
+ *    further out of sync as the match goes on.
+ * 5. Apply saves the sync (state/videos.ts: video = rate * (raw - logMinusVideo)).
  *
  * Inside this view the video and the log are unlinked: nothing moves the
  * shared time, and the app's shortcuts are paused. Keys: Space play/pause,
@@ -17,7 +20,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { sessionStore, type LogEntry } from '../state/session';
 import { uiStore, toast } from '../state/ui';
-import { videoStore, setVideoSync } from '../state/videos';
+import { videoStore, setVideoSync, videoTimeAt, speedNote, RATE_LIMITS } from '../state/videos';
 import { createStore, useStore, type Store } from '../state/store';
 import { client } from '../worker/client';
 import { DERIVED_PREFIX } from '../worker/protocol';
@@ -43,6 +46,13 @@ interface Marker {
   raw: number;
 }
 
+/** A log moment and the video frame that shows it. */
+interface Pair {
+  raw: number;
+  video: number;
+  label: string;
+}
+
 interface SyncState {
   videoT: number;
   duration: number;
@@ -50,8 +60,34 @@ interface SyncState {
   /** The chosen log moment (raw seconds) and which marker it is ('custom' for a click elsewhere). */
   moment: number | null;
   momentId: string;
-  /** Video time paired with the moment; null until "This frame is ..." is pressed. */
-  paired: number | null;
+  /** Up to two pairs, by log time. */
+  pairs: Pair[];
+}
+
+/** Two pairs closer than this in log time give too noisy a clock speed; the newer one replaces the older. */
+const MIN_PAIR_GAP = 5;
+
+interface SyncModel {
+  logMinusVideo: number;
+  rate: number;
+  /** Why two pairs can't be used together, if they can't. */
+  bad?: string;
+}
+
+/** The sync the pairs give. One pair keeps the video's earlier speed correction (`keepRate`); two set it. */
+function modelOf(pairs: Pair[], keepRate: number): SyncModel | null {
+  if (!pairs.length) return null;
+  const a = pairs[0];
+  if (pairs.length === 1) return { logMinusVideo: a.raw - a.video / keepRate, rate: keepRate };
+  const b = pairs[1];
+  const rate = (b.video - a.video) / (b.raw - a.raw);
+  if (!(rate >= RATE_LIMITS[0] && rate <= RATE_LIMITS[1]))
+    return {
+      logMinusVideo: a.raw - a.video,
+      rate: 1,
+      bad: `These two pairs disagree too much: the video would run ${Number.isFinite(rate) && rate > 0 ? speedNote(rate) : 'backwards'}. Check that each frame really is that moment.`,
+    };
+  return { logMinusVideo: a.raw - a.video / rate, rate };
 }
 
 const clock = (s: number) => {
@@ -92,8 +128,11 @@ function VideoSync({ log }: { log: LogEntry }) {
   const entry = videos.byLog[log.fileName];
   const url = videos.urls[log.fileName];
   const videoRef = useRef<HTMLVideoElement>(null);
-  const local = useMemo(() => createStore<SyncState>({ videoT: 0, duration: 0, playing: false, moment: null, momentId: 'custom', paired: null }), []);
-  const st = useStore(local, (s) => ({ moment: s.moment, momentId: s.momentId, paired: s.paired, playing: s.playing }));
+  const local = useMemo(() => createStore<SyncState>({ videoT: 0, duration: 0, playing: false, moment: null, momentId: 'custom', pairs: [] }), []);
+  const st = useStore(local, (s) => ({ moment: s.moment, momentId: s.momentId, pairs: s.pairs, playing: s.playing }));
+  // the speed correction a single pair keeps: the one saved for this video, if any
+  const keepRate = useRef(entry?.rate ?? 1).current;
+  const model = modelOf(st.pairs, keepRate);
   const hasSpeed = log.fields.some((f) => f.key === SPEED_KEY);
   const speed = useSeries(log.id, hasSpeed ? SPEED_KEY : null);
   const markers = useMemo(() => findMarkers(log, speed), [log, speed]);
@@ -107,8 +146,8 @@ function VideoSync({ log }: { log: LogEntry }) {
     if (started.current || !markers.length) return;
     started.current = true;
     const m = markers.find((x) => x.id === 'auto') ?? markers[0];
-    const lmv = entry?.logMinusVideo ?? null;
-    local.set({ moment: m.raw, momentId: m.id, paired: lmv === null ? null : m.raw - lmv });
+    const synced = entry && entry.logMinusVideo !== null;
+    local.set({ moment: m.raw, momentId: m.id, pairs: synced ? [{ raw: m.raw, video: videoTimeAt(m.raw, entry), label: m.label }] : [] });
   }, [markers, entry, local]);
   // ...and show that frame once the video can seek
   const onMeta = () => {
@@ -116,8 +155,8 @@ function VideoSync({ log }: { log: LogEntry }) {
     if (!v) return;
     local.set({ duration: v.duration });
     const s = local.get();
-    if (s.paired !== null) {
-      chaseSeek(v, s.paired);
+    if (s.pairs.length) {
+      chaseSeek(v, s.pairs[0].video);
       local.set({ videoT: seekTarget(v) });
     }
   };
@@ -158,18 +197,31 @@ function VideoSync({ log }: { log: LogEntry }) {
   }, []);
   const pair = useCallback(() => {
     const v = videoRef.current;
-    if (!v || local.get().moment === null) return;
+    const s = local.get();
+    if (!v || s.moment === null) return;
     v.pause();
-    local.set({ paired: seekTarget(v) });
-  }, [local]);
+    const label = markers.find((m) => m.id === s.momentId)?.label ?? `log ${formatTime(s.moment + log.offset)}`;
+    const next: Pair = { raw: s.moment, video: seekTarget(v), label };
+    // a pair near an existing one replaces it; a third replaces the nearer of the two
+    let pairs = s.pairs.filter((p) => Math.abs(p.raw - next.raw) >= MIN_PAIR_GAP);
+    if (pairs.length >= 2) {
+      const far = Math.abs(pairs[0].raw - next.raw) > Math.abs(pairs[1].raw - next.raw) ? pairs[0] : pairs[1];
+      pairs = [far];
+    }
+    local.set({ pairs: [...pairs, next].sort((a, b) => a.raw - b.raw) });
+  }, [local, markers, log.offset]);
   const apply = useCallback(() => {
     const s = local.get();
-    if (s.moment === null || s.paired === null) return;
-    setVideoSync(log.fileName, s.moment - s.paired);
-    const label = markers.find((m) => m.id === s.momentId)?.label.toLowerCase() ?? 'the chosen moment';
-    toast(`Synced: video ${clock(s.paired)} is ${label}. The video now follows the timeline.`);
+    const m = modelOf(s.pairs, keepRate);
+    if (!m || m.bad) return;
+    setVideoSync(log.fileName, m.logMinusVideo, m.rate);
+    toast(
+      s.pairs.length === 2 && Math.abs(m.rate - 1) >= 0.0005
+        ? `Synced at two moments. The video's clock runs ${speedNote(m.rate)}; Brownout plays it ${m.rate < 1 ? 'faster' : 'slower'} to match the log.`
+        : `Synced: video ${clock(s.pairs[0].video)} is ${s.pairs[0].label.toLowerCase()}. The video now follows the timeline.`,
+    );
     close();
-  }, [local, log.fileName, markers, close]);
+  }, [local, log.fileName, close, keepRate]);
 
   // Keys belong to this view while it is open.
   useEffect(() => {
@@ -196,7 +248,24 @@ function VideoSync({ log }: { log: LogEntry }) {
 
   const momentLabel = markers.find((m) => m.id === st.momentId)?.label ?? (st.moment !== null ? `log ${formatTime(st.moment + log.offset)}` : '');
   const changed =
-    st.paired !== null && st.moment !== null && entry && entry.logMinusVideo !== null && Math.abs(st.moment - st.paired - entry.logMinusVideo) > 1e-6;
+    !!model &&
+    !!entry &&
+    entry.logMinusVideo !== null &&
+    (Math.abs(model.logMinusVideo - entry.logMinusVideo) > 1e-6 || Math.abs(model.rate - (entry.rate ?? 1)) > 1e-9);
+  const lc = (x: string) => x.charAt(0).toLowerCase() + x.slice(1);
+  const status = (() => {
+    if (!model) return 'Not paired yet.';
+    const play = `Play the video: the white line on the log moves with it${hasSpeed ? ', and the speed line should rise when the robot starts moving' : ''}.`;
+    if (st.pairs.length === 1) {
+      const p = st.pairs[0];
+      return `3. Paired: video ${clock(p.video)} is ${lc(p.label)}. ${play} To fine-tune, step to the exact frame and press the button again. If the video drifts later in the match, also pair a late moment such as teleop end.${keepRate !== 1 ? ` Keeps the earlier speed correction (the video's clock runs ${speedNote(keepRate)}).` : ''}${changed ? ' (Changes the saved sync.)' : ''}`;
+    }
+    const [a, b] = st.pairs;
+    if (model.bad) return `Paired: video ${clock(a.video)} is ${lc(a.label)} and video ${clock(b.video)} is ${lc(b.label)}. ${model.bad}`;
+    const speedText =
+      Math.abs(model.rate - 1) < 0.0005 ? 'The video keeps time with the log.' : `The video's clock runs ${speedNote(model.rate)}; Apply corrects for that.`;
+    return `3. Paired: video ${clock(a.video)} is ${lc(a.label)} and video ${clock(b.video)} is ${lc(b.label)}. ${speedText} ${play}${changed ? ' (Changes the saved sync.)' : ''}`;
+  })();
 
   return (
     <div className="modal-backdrop">
@@ -210,7 +279,7 @@ function VideoSync({ log }: { log: LogEntry }) {
           <button className="btn" onClick={close} data-testid="video-sync-cancel">
             Cancel
           </button>
-          <button className="btn primary" onClick={apply} disabled={st.paired === null} data-testid="video-sync-apply" title="Save the sync (Enter)">
+          <button className="btn primary" onClick={apply} disabled={!model || !!model.bad} data-testid="video-sync-apply" title="Save the sync (Enter)">
             Apply
           </button>
         </div>
@@ -280,7 +349,7 @@ function VideoSync({ log }: { log: LogEntry }) {
                   <button
                     key={m.id}
                     className={`tool-btn${st.momentId === m.id ? ' active' : ''}`}
-                    onClick={() => local.set({ moment: m.raw, momentId: m.id, paired: null })}
+                    onClick={() => local.set({ moment: m.raw, momentId: m.id })}
                     data-testid={`video-sync-marker-${m.id}`}
                     title={`${m.label} at ${formatTime(m.raw + log.offset)} on the timeline`}
                   >
@@ -290,17 +359,20 @@ function VideoSync({ log }: { log: LogEntry }) {
                 {!markers.length && <span className="hint">This log has no robot mode data; click the strip below to pick a moment.</span>}
                 {!hasSpeed && markers.length > 0 && <span className="hint">(no robot pose in this log, so no speed line)</span>}
               </div>
-              <LogStrip log={log} store={local} markers={markers} speedKey={hasSpeed ? SPEED_KEY : null} />
+              <LogStrip log={log} store={local} markers={markers} speedKey={hasSpeed ? SPEED_KEY : null} keepRate={keepRate} />
             </div>
             <div className="vsync-pair">
               <span className="hint">2. Find the same moment in the video, then</span>
               <button className="btn primary" onClick={pair} disabled={st.moment === null} data-testid="video-sync-pair">
-                This frame is {momentLabel ? momentLabel.charAt(0).toLowerCase() + momentLabel.slice(1) : 'the moment'}
+                This frame is {momentLabel ? lc(momentLabel) : 'the moment'}
               </button>
+              {st.pairs.length > 0 && (
+                <button className="btn" onClick={() => local.set({ pairs: [] })} title="Forget the pairs made here and start over">
+                  Clear pairs
+                </button>
+              )}
               <span className="vsync-status" data-testid="video-sync-status">
-                {st.paired === null || st.moment === null
-                  ? 'Not paired yet.'
-                  : `3. Paired: video ${clock(st.paired)} is ${momentLabel.toLowerCase()}. Play the video: the white line on the log moves with it${hasSpeed ? ', and the speed line should rise when the robot starts moving' : ''}. To fine-tune, step to the exact frame and press the button again, then Apply.${changed ? ' (Changes the saved sync.)' : ''}`}
+                {status}
               </span>
             </div>
           </div>
@@ -360,7 +432,19 @@ function Scrub({ store, onSeek }: { store: Store<SyncState>; onSeek: (t: number)
 }
 
 /** This log around its markers: mode bands, robot speed, the markers, the chosen moment and (once paired) where the video is. */
-function LogStrip({ log, store, markers, speedKey }: { log: LogEntry; store: Store<SyncState>; markers: Marker[]; speedKey: string | null }) {
+function LogStrip({
+  log,
+  store,
+  markers,
+  speedKey,
+  keepRate,
+}: {
+  log: LogEntry;
+  store: Store<SyncState>;
+  markers: Marker[];
+  speedKey: string | null;
+  keepRate: number;
+}) {
   const rangeRef = useRef<[number, number]>([log.startTs, log.endTs]);
   const geomRef = useRef({ x0: 0, x1: 1 });
   const draw = useCallback(
@@ -468,9 +552,17 @@ function LogStrip({ log, store, markers, speedKey }: { log: LogEntry; store: Sto
         ctx.fillStyle = pal.warn;
         ctx.fillRect(Math.round(xOf(s.moment)) - 1, bandTop, 2, bot - bandTop);
       }
+      // the paired moments: a small tab on the mode band
+      ctx.fillStyle = pal.accent;
+      for (const p of s.pairs) {
+        if (p.raw < lo || p.raw > hi) continue;
+        const x = Math.round(xOf(p.raw));
+        ctx.fillRect(x - 3, bandTop - 3, 6, 4);
+      }
       // where the video is, through the pairing
-      if (s.paired !== null && s.moment !== null) {
-        const raw = s.moment + (s.videoT - s.paired);
+      const model = modelOf(s.pairs, keepRate);
+      if (model && !model.bad) {
+        const raw = model.logMinusVideo + s.videoT / model.rate;
         if (raw >= lo && raw <= hi) {
           ctx.fillStyle = pal.cursor;
           ctx.fillRect(Math.round(xOf(raw)), bandTop, 1.5, bot - bandTop);
@@ -478,7 +570,7 @@ function LogStrip({ log, store, markers, speedKey }: { log: LogEntry; store: Sto
       }
       drawTimeAxis(ctx, x0, x1, bot, lo + log.offset, hi + log.offset, top);
     },
-    [log, store, markers, speedKey],
+    [log, store, markers, speedKey, keepRate],
   );
   const ref = useCanvas(draw, [store, sessionStore], [draw]);
 
@@ -494,7 +586,7 @@ function LogStrip({ log, store, markers, speedKey }: { log: LogEntry; store: Sto
       const x = Math.min(x1, Math.max(x0, e.clientX - r.left));
       const raw = lo + ((x - x0) / (x1 - x0)) * (hi - lo);
       const near = markers.find((m) => Math.abs(x0 + ((m.raw - lo) / (hi - lo)) * (x1 - x0) - x) <= 8);
-      store.set(near ? { moment: near.raw, momentId: near.id, paired: null } : { moment: raw, momentId: 'custom', paired: null });
+      store.set(near ? { moment: near.raw, momentId: near.id } : { moment: raw, momentId: 'custom' });
     };
     const onDown = (e: PointerEvent) => {
       down = true;

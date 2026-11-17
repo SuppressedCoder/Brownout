@@ -15,7 +15,7 @@ import { panelStore, updatePanel, type VideoSettings } from '../state/panels';
 import { sessionStore, type LogEntry } from '../state/session';
 import { timeStore } from '../state/time';
 import { useStore } from '../state/store';
-import { videoStore, setVideo, setVideoUrl, setVideoSync, removeVideo } from '../state/videos';
+import { videoStore, setVideo, setVideoUrl, setVideoSync, removeVideo, videoTimeAt, speedNote } from '../state/videos';
 import { toast, uiStore } from '../state/ui';
 import { chaseSeek, seekTarget } from '../lib/videoSeek';
 import { findVideosFor, useVideoFor } from '../lib/videoOffer';
@@ -83,7 +83,7 @@ export function VideoPanel({ id }: { id: string }) {
         setNote('Set the cursor on the timeline to move the video.');
         return;
       }
-      const target = t.cursor - l.offset - e.logMinusVideo;
+      const target = videoTimeAt(t.cursor - l.offset, e);
       const end = Number.isFinite(v.duration) ? v.duration : Infinity;
       if (target < 0 || target > end) {
         if (!v.paused) v.pause();
@@ -92,7 +92,9 @@ export function VideoPanel({ id }: { id: string }) {
       }
       setNote('');
       if (t.playing) {
-        if (v.playbackRate !== t.speed) v.playbackRate = t.speed;
+        // a video whose clock runs slow or fast (rate from two paired moments) plays faster or slower to keep up
+        const rate = t.speed * (e.rate ?? 1);
+        if (v.playbackRate !== rate) v.playbackRate = rate;
         // Re-seek only when clearly off, and not again while the last one is settling,
         // or the video stalls in a loop of seeks while the timeline runs on.
         const now = performance.now();
@@ -150,11 +152,12 @@ export function VideoPanel({ id }: { id: string }) {
       toast(`This log has no ${what}.`, 'error');
       return;
     }
-    setVideoSync(log.fileName, raw - v.currentTime);
+    // one moment: keep the video's speed correction, if it has one
+    setVideoSync(log.fileName, raw - v.currentTime / (entry?.rate ?? 1));
     toast(`Synced: video ${clock(v.currentTime)} is ${what}. The video now follows the timeline.`);
   };
   const nudge = (frames: number) => {
-    if (log && entry && entry.logMinusVideo !== null) setVideoSync(log.fileName, entry.logMinusVideo - frames * FRAME);
+    if (log && entry && entry.logMinusVideo !== null) setVideoSync(log.fileName, entry.logMinusVideo - (frames * FRAME) / (entry.rate ?? 1));
   };
   const cursor = useStore(timeStore, (s) => s.cursor !== null);
 
@@ -310,6 +313,7 @@ export function VideoPanel({ id }: { id: string }) {
             {synced ? (
               <span className="video-sync" data-testid="video-synced">
                 Synced to <b style={{ color: log.color }}>{log.name}</b>: video 0:00 is {formatTime(entry.logMinusVideo! + log.offset)} on the timeline
+                {entry.rate ? ` · the video's clock runs ${speedNote(entry.rate)}, corrected` : ''}
               </span>
             ) : (
               <>
