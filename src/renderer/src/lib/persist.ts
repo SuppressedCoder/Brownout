@@ -5,7 +5,7 @@
  */
 import { grid, type SavedLayout } from '../components/Grid';
 import { panelStore } from '../state/panels';
-import { sessionStore } from '../state/session';
+import { sessionStore, SIDEBAR_MIN } from '../state/session';
 import { timeStore } from '../state/time';
 
 const KEY = 'brownout.layout.v1';
@@ -18,6 +18,7 @@ export interface Prefs {
   timelineMode: string;
   timelineHeight: number | null;
   sidebarOpen: boolean;
+  sidebarWidth?: number | null;
   timeFormat: string;
   brownoutThreshold: number;
   tagVariant: string;
@@ -41,6 +42,7 @@ function scheduleSave() {
         timelineMode: s.timelineMode,
         timelineHeight: s.timelineHeight,
         sidebarOpen: s.sidebarOpen,
+        sidebarWidth: s.sidebarWidth,
         timeFormat: timeStore.get().timeFormat,
         brownoutThreshold: s.brownoutThreshold,
         tagVariant: s.tagVariant,
@@ -79,6 +81,7 @@ export function loadPrefs(): void {
       timelineMode: (p.timelineMode as never) ?? 'standard',
       timelineHeight: typeof p.timelineHeight === 'number' ? p.timelineHeight : null,
       sidebarOpen: p.sidebarOpen ?? true,
+      sidebarWidth: typeof p.sidebarWidth === 'number' && p.sidebarWidth >= SIDEBAR_MIN ? p.sidebarWidth : null,
       brownoutThreshold: p.brownoutThreshold ?? 6.75,
       tagVariant: p.tagVariant === 'andymark' ? 'andymark' : 'welded',
       wholeLog: p.wholeLog === true,

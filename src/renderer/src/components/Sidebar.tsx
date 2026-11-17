@@ -6,15 +6,22 @@
  * or removes one, Shift-click selects a range. Dragging a selected field
  * drags the whole selection; dragging a folder takes every field inside it.
  * Double-click adds a field to the active panel.
+ *
+ * The search narrows by name, and by type: while typing a word, the type it
+ * could finish as (one that exists in the open logs: "Pose2d", "boolean")
+ * shows faintly; Tab turns it into a type filter, and typing goes on. Several
+ * types show any of them; words must all appear in the name. Backspace on an
+ * empty search removes the last type. Drag the sidebar's right edge to make
+ * it wider (double-click it for the default width).
  */
 import { useMemo, useRef, useState } from 'react';
-import { sessionStore, toggleSelectedKey, setSelectedKeys, addTimelineTrack, activeProfileId } from '../state/session';
+import { sessionStore, toggleSelectedKey, setSelectedKeys, addTimelineTrack, activeProfileId, SIDEBAR_MIN } from '../state/session';
 import { timeStore } from '../state/time';
 import { useStore } from '../state/store';
 import { panelStore, addFieldToPanel, addFieldsToPanel, panelAccepts, panelTypeForField, PANEL_TITLES } from '../state/panels';
 import { profileStore, profileById, updateProfile } from '../state/profiles';
 import { grid } from './Grid';
-import { useFieldIndex, keyMatchesSearch, shortKey, type MergedField } from '../lib/fields';
+import { useFieldIndex, keyMatchesSearch, shortKey, typeLabels, completeType, typeMatches, type MergedField } from '../lib/fields';
 import { setFieldDrag, type FieldDrag } from '../lib/dnd';
 import { client } from '../worker/client';
 import { useSeriesTick } from '../lib/useSeries';
@@ -140,6 +147,15 @@ export function Sidebar() {
   const profiles = useStore(profileStore, (s) => s.profiles);
   const favorites = (profiles.find((p) => p.id === profileId) ?? profileById(profileId)).favorites;
   const [q, setQ] = useState('');
+  const [types, setTypes] = useState<string[]>([]);
+  const width = useStore(sessionStore, (s) => s.sidebarWidth);
+  const labels = useMemo(() => typeLabels(fields.values()), [fields]);
+  // the word being typed, and the type it could finish as
+  const word = /(\S+)$/.exec(q)?.[1] ?? '';
+  const completion = completeType(
+    word,
+    labels.filter((t) => !types.includes(t)),
+  );
   const [open, setOpen] = useState<Set<string>>(() => new Set());
   const [favOpen, setFavOpen] = useState(true);
   const [showGenerated, setShowGenerated] = useState(true);
@@ -158,15 +174,50 @@ export function Sidebar() {
     });
 
   const flat = useMemo(() => {
-    if (!q) return null;
+    if (!q.trim() && !types.length) return null;
     const out: MergedField[] = [];
     for (const f of fields.values()) {
       if (!showGenerated && f.generated) continue;
-      if (keyMatchesSearch(f.key, q)) out.push(f);
+      if (typeMatches(f, types) && keyMatchesSearch(f.key, q)) out.push(f);
       if (out.length > 500) break;
     }
     return out;
-  }, [q, fields, showGenerated]);
+  }, [q, types, fields, showGenerated]);
+
+  const onSearchKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Tab' && !e.shiftKey && completion) {
+      // the word becomes a type filter; keep typing for the next one
+      e.preventDefault();
+      setTypes((t) => [...t, completion]);
+      setQ(q.slice(0, q.length - word.length));
+    } else if (e.key === 'Backspace' && !q && types.length) {
+      e.preventDefault();
+      setTypes((t) => t.slice(0, -1));
+    } else if (e.key === 'Escape' && (q || types.length)) {
+      e.stopPropagation();
+      setQ('');
+      setTypes([]);
+    }
+  };
+
+  // Drag the right edge to make the sidebar wider or narrower
+  const onResizeDown = (e: React.PointerEvent) => {
+    e.preventDefault();
+    const el = e.currentTarget as HTMLElement;
+    const startX = e.clientX;
+    const startW = (el.parentElement as HTMLElement).getBoundingClientRect().width;
+    el.setPointerCapture(e.pointerId);
+    const move = (ev: PointerEvent) => {
+      const w = Math.round(Math.min(window.innerWidth * 0.6, Math.max(SIDEBAR_MIN, startW + ev.clientX - startX)));
+      sessionStore.set({ sidebarWidth: w });
+    };
+    const up = () => {
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+    };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+  };
 
   const onRowClick = (e: React.MouseEvent, key: string) => {
     if (e.shiftKey && anchor.current && order.current.includes(anchor.current)) {
@@ -256,9 +307,44 @@ export function Sidebar() {
   const favMissing = favorites.length - favFields.length;
 
   return (
-    <div className="sidebar">
+    <div className="sidebar" style={width ? { width } : undefined}>
+      <div
+        className="sidebar-resizer"
+        onPointerDown={onResizeDown}
+        onDoubleClick={() => sessionStore.set({ sidebarWidth: null })}
+        title="Drag to make the field list wider or narrower · double-click for the default width"
+        data-testid="sidebar-resizer"
+      />
       <div className="sidebar-head">
-        <input className="search" placeholder="Search fields…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <div className="search search-box" data-testid="field-search">
+          {types.map((t) => (
+            <span key={t} className="type-chip" data-testid="type-chip">
+              {t}
+              <button className="chip-btn" title={`Stop filtering by ${t}`} onClick={() => setTypes((x) => x.filter((y) => y !== t))}>
+                <Icon name="close" size={9} />
+              </button>
+            </span>
+          ))}
+          <span className="search-field">
+            {/* the faint rest of the type the word could finish as */}
+            {completion && (
+              <span className="search-ghost" aria-hidden>
+                <span className="search-ghost-typed">{q}</span>
+                {completion.slice(word.length)}
+                <span className="search-ghost-key">Tab</span>
+              </span>
+            )}
+            <input
+              placeholder={types.length ? 'More types or name words…' : 'Search fields, or a type then Tab…'}
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              onKeyDown={onSearchKey}
+              spellCheck={false}
+              title="Words narrow by name. Start typing a type (Pose2d, boolean, number…) and press Tab to filter by it; Backspace removes the last type."
+              data-testid="field-search-input"
+            />
+          </span>
+        </div>
         <button className={`tool-btn${showGenerated ? ' active' : ''}`} title="Show struct / array children" onClick={() => setShowGenerated(!showGenerated)}>
           {'{}'}
         </button>

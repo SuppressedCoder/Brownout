@@ -126,6 +126,72 @@ async function main() {
   check('hamburger hides the sidebar', (await page.locator('.sidebar').count()) === 0);
   await page.locator('.header > button').first().click();
   check('hamburger shows it again', (await page.locator('.sidebar').count()) === 1);
+
+  console.log('Field search by type, wider sidebar');
+  {
+    const input = page.locator('[data-testid=field-search-input]');
+    await input.click();
+    await input.type('pos');
+    await page.waitForTimeout(150);
+    const ghost = await page
+      .locator('.search-ghost')
+      .innerText()
+      .catch(() => '');
+    check('typing the start of a type shows the rest of it', ghost.replace(/\s+/g, ' ').includes('e2d'), ghost);
+    await page.keyboard.press('Tab');
+    await page.waitForTimeout(200);
+    const chips = await page.locator('[data-testid=type-chip]').allInnerTexts();
+    check(
+      'Tab turns it into a type filter and keeps typing',
+      chips.length === 1 &&
+        chips[0].trim() === 'Pose2d' &&
+        (await input.inputValue()) === '' &&
+        (await input.evaluate((el) => el === (el as unknown as { ownerDocument: { activeElement: unknown } }).ownerDocument.activeElement)),
+      JSON.stringify(chips),
+    );
+    const badges = await page.locator('[data-testid=field-tree] .tree-row.field .kind-badge').allInnerTexts();
+    check('only fields of that type are listed', badges.length > 0 && badges.every((b) => b.trim() === 'Pose2d'), badges.join(','));
+    await input.type('odometry');
+    await page.waitForTimeout(200);
+    const keys = await page
+      .locator('[data-testid=field-tree] .tree-row.field')
+      .evaluateAll((els) => els.map((e) => (e as unknown as { dataset: { key: string } }).dataset.key));
+    check('a word after it narrows by name', keys.length > 0 && keys.every((k) => /odometry/i.test(k)), keys.join(','));
+    await input.fill('');
+    await page.keyboard.press('Backspace');
+    await page.waitForTimeout(150);
+    check('Backspace on an empty search removes the type', (await page.locator('[data-testid=type-chip]').count()) === 0);
+    await input.type('bool');
+    await page.keyboard.press('Tab');
+    await input.type('num');
+    await page.keyboard.press('Tab');
+    await page.waitForTimeout(200);
+    const two = await page.locator('[data-testid=type-chip]').allInnerTexts();
+    const kinds = new Set((await page.locator('[data-testid=field-tree] .tree-row.field .kind-badge').allInnerTexts()).map((b) => b.trim()));
+    check(
+      'two types list fields of either',
+      two.map((x) => x.trim()).join() === 'boolean,number' && kinds.has('boolean') && kinds.has('number') && kinds.size === 2,
+      `${two.join()} / ${[...kinds].join()}`,
+    );
+    await page.screenshot({ path: resolve(outDir, 'ui-field-filter.png') });
+    await page.keyboard.press('Escape');
+    check('Escape clears the search', (await page.locator('[data-testid=type-chip]').count()) === 0 && (await input.inputValue()) === '');
+    // drag the sidebar's edge
+    const sb0 = await page.locator('.sidebar').boundingBox();
+    const rz = await page.locator('[data-testid=sidebar-resizer]').boundingBox();
+    if (sb0 && rz) {
+      await page.mouse.move(rz.x + rz.width / 2, rz.y + 200);
+      await page.mouse.down();
+      await page.mouse.move(rz.x + rz.width / 2 + 150, rz.y + 200, { steps: 6 });
+      await page.mouse.up();
+    }
+    const sb1 = await page.locator('.sidebar').boundingBox();
+    check('dragging its edge makes the sidebar wider', !!sb0 && !!sb1 && sb1.width > sb0.width + 120, JSON.stringify({ sb0, sb1 }));
+    await page.locator('[data-testid=sidebar-resizer]').dblclick();
+    await page.waitForTimeout(150);
+    const sb2 = await page.locator('.sidebar').boundingBox();
+    check('double-clicking it goes back to the default width', !!sb0 && !!sb2 && Math.abs(sb2.width - sb0.width) < 2);
+  }
   await page.locator('[data-testid=file-menu]').click();
   check('the File menu is fully visible', (await menuState(page)) === 'ok', await menuState(page));
   check('no emoji in the File menu', (await pictographs(page)) === '', await pictographs(page));

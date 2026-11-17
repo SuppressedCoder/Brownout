@@ -62,6 +62,8 @@ export interface SessionState {
   /** Logs currently being read / indexed / analyzed. */
   loadingItems: LoadingItem[];
   sidebarOpen: boolean;
+  /** Sidebar width in px set by dragging its edge; null = the default. */
+  sidebarWidth: number | null;
   timelineMode: 'compact' | 'standard' | 'expanded';
   /** Height in px set by dragging the timeline's top edge; null = automatic for the mode. */
   timelineHeight: number | null;
@@ -74,6 +76,9 @@ export interface SessionState {
 }
 
 export type AppView = 'panels' | 'video' | 'power';
+
+/** The narrowest the sidebar can be dragged (px). */
+export const SIDEBAR_MIN = 220;
 
 export interface LoadingItem {
   id: string;
@@ -98,6 +103,7 @@ export const sessionStore = createStore<SessionState>({
   fieldTags: null,
   loadingItems: [],
   sidebarOpen: true,
+  sidebarWidth: null,
   timelineMode: 'standard',
   timelineHeight: null,
   timelineTracks: [],

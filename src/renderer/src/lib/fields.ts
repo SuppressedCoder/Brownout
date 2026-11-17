@@ -65,6 +65,35 @@ export function shortKey(key: string, parts = 2): string {
   return p.slice(-parts).join('/');
 }
 
+/** The type a field shows on its badge: its struct name, else its kind ("Pose2d", "number", "boolean[]"). */
+export function typeLabel(f: { kind: string; structName?: string }): string {
+  return f.structName ?? f.kind;
+}
+
+/** The type labels in these fields, most common first. */
+export function typeLabels(fields: Iterable<{ kind: string; structName?: string }>): string[] {
+  const n = new Map<string, number>();
+  for (const f of fields) {
+    const t = typeLabel(f);
+    n.set(t, (n.get(t) ?? 0) + 1);
+  }
+  return [...n.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([t]) => t);
+}
+
+/** The type a typed word could finish as (the most common one starting with it), or null. */
+export function completeType(word: string, labels: string[]): string | null {
+  if (!word) return null;
+  const w = word.toLowerCase();
+  return labels.find((t) => t.toLowerCase().startsWith(w)) ?? null;
+}
+
+/** Whether a field passes the type filters: any of them (none = every type). */
+export function typeMatches(f: { kind: string; structName?: string }, types: string[]): boolean {
+  if (!types.length) return true;
+  const t = typeLabel(f).toLowerCase();
+  return types.some((x) => x.toLowerCase() === t);
+}
+
 export function keyMatchesSearch(key: string, q: string): boolean {
   if (!q) return true;
   const k = key.toLowerCase();
