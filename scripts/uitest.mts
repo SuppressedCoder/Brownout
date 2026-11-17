@@ -393,6 +393,25 @@ async function main() {
   check('dragging the top edge resizes the timeline', typeof h === 'number' && h > 150, String(h));
   await page.evaluate('window.__brownout.sessionStore.set({ timelineHeight: null })');
 
+  console.log('Position and vision');
+  {
+    const vis = await state<{ kind: string; size: number; text: string }[]>(
+      page,
+      `s.sessionStore.get().logs[0].events.filter(e => e.kind === 'vision').map(e => ({ kind: e.finding.kind, size: e.finding.size, text: e.text }))`,
+    );
+    check(
+      'the demo match with a bad camera reading gets a camera disagreement and a position jump',
+      vis.some((v) => v.kind === 'disagree' && v.text.startsWith('Camera 0 was 1.')) && vis.some((v) => v.kind === 'jump' && Math.abs(v.size - 0.58) < 0.05),
+      JSON.stringify(vis),
+    );
+    check('...each saying what was running', vis.length > 0 && vis.every((v) => v.text.includes(' during ')), JSON.stringify(vis.map((v) => v.text)));
+    check('the match without one has none', (await state<number>(page, `s.sessionStore.get().logs[1].events.filter(e => e.kind === 'vision').length`)) === 0);
+    check(
+      'the console lists them with the other events',
+      (await page.locator('.console-panel', { hasText: 'Robot position jumped' }).count()) > 0 || (await page.getByText('Robot position jumped').count()) > 0,
+    );
+  }
+
   console.log('Graphs do not move time; value axis zooms on its own');
   await page.keyboard.press('m');
   const graph = await page.locator('.graph-panel canvas').first().boundingBox();

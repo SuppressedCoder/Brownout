@@ -5,7 +5,7 @@
  * - one boolean field per command (true while it runs), as AdvantageKit
  *   projects log under /RealOutputs/CommandsAll/<name>.
  */
-import type { FieldInfo } from './log';
+import type { FieldInfo, LogData } from './log';
 
 export interface CommandRun {
   start: number;
@@ -91,4 +91,20 @@ export function detectCommandSources(fields: FieldInfo[]): CommandSource[] {
   for (const [prefix, keys] of [...folders.entries()].sort((a, b) => Number(/Unique\/$/.test(a[0])) - Number(/Unique\/$/.test(b[0]))))
     out.push({ kind: 'booleans', prefix, keys: keys.sort() });
   return out;
+}
+
+/** The commands from the log's best source (the commands panel lets the user pick another). Empty when it logs none. */
+export function commandRowsFromLog(log: LogData): CommandRow[] {
+  const src = detectCommandSources(log.fields)[0];
+  if (!src) return [];
+  if (src.kind === 'names') {
+    const s = log.series(src.key);
+    return s && s.kind === 'array' ? commandsFromNames(s.t, s.v, log.endTs) : [];
+  }
+  const sources: { name: string; t: ArrayLike<number>; v: ArrayLike<unknown> }[] = [];
+  for (const k of src.keys) {
+    const s = log.series(k);
+    if (s && s.kind === 'boolean') sources.push({ name: k.slice(src.prefix.length), t: s.t, v: s.v });
+  }
+  return commandsFromBooleans(sources, log.endTs);
 }

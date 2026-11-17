@@ -24,6 +24,8 @@ interface MatchSpec {
   idleBefore: number; // seconds of disabled before auto
   rawStart: number; // first timestamp (s)
   brownoutAt?: number; // seconds after teleop start
+  /** Seconds after teleop start: Camera0 reads 1.1 m off for 1 s, then the pose snaps 0.6 m toward it and drifts back over 3 s. */
+  visionGlitchAt?: number;
   epoch: number; // unix seconds at log start
   auto: string;
   gitSha: string;
@@ -53,6 +55,7 @@ const matches: MatchSpec[] = [
     batteryR: 0.018,
     voc: 12.7,
     shooterGain: 1.0,
+    visionGlitchAt: 40,
   },
   {
     file: 'FRC_20260321_171844_NYROC_Q18.wpilog',
@@ -451,8 +454,10 @@ function makeLog(m: MatchSpec): Uint8Array {
     w.double(E.userCode, ts, Number((cycleMs * 0.6).toFixed(2)));
     if (Math.round(t * 50) % 25 === 0) w.double(E.canUtil, ts, Number((0.55 + 0.1 * Math.sin(t) + rand() * 0.05).toFixed(3)));
 
-    // Pose and path
-    w.record(E.robotPose, ts, pose(x, y, theta));
+    // Pose and path. A bad vision reading in one match snaps the logged pose off the true one for a moment.
+    const glitchT = m.visionGlitchAt !== undefined ? teleopStart + m.visionGlitchAt : Infinity;
+    const poseBias = t >= glitchT + 1 && t < glitchT + 4 ? 0.6 * (1 - (t - glitchT - 1) / 3) : 0;
+    w.record(E.robotPose, ts, pose(x + poseBias, y, theta));
     w.record(
       E.gyroYaw,
       ts,
@@ -524,7 +529,12 @@ function makeLog(m: MatchSpec): Uint8Array {
           w.boolean(E.camConnected, ts, true);
           camDrop = false;
         }
-        const [seen, est] = cameraView(0);
+        let [seen, est] = cameraView(0);
+        // the glitch: a misread tag puts the estimate 1.1 m off for a second
+        if (m.visionGlitchAt !== undefined && t >= teleopStart + m.visionGlitchAt && t < teleopStart + m.visionGlitchAt + 1) {
+          seen = seen.length ? seen : [7];
+          est = [[x + 1.1, y, theta]];
+        }
         if (seen.join() !== lastSeen[0]) {
           w.int64Array(E.tagIds, ts, seen);
           lastSeen[0] = seen.join();

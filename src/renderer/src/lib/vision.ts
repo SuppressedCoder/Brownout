@@ -5,6 +5,8 @@
  * worker rebuilds that log's /Brownout/Vision/<camera>/... fields (tags
  * seen, tag count, estimate error) and its per-camera summary.
  */
+import type { PointEvent } from '@core/analyzers/events';
+import { describeFinding, type PoseFinding } from '@core/analyzers/poseDeviations';
 import { sessionStore, addTimelineTrack, removeTimelineTrack, type LogEntry } from '../state/session';
 import { profileStore, profileById, CAMERA_COLORS, type Camera } from '../state/profiles';
 import { client } from '../worker/client';
@@ -22,6 +24,14 @@ export function detectedCameras(log: LogEntry): Camera[] {
     detected.set(log.fields, c);
   }
   return c;
+}
+
+/** A log's events with its camera disagreements replaced by `findings` (position jumps come with the log itself). */
+export function withCameraFindings(events: PointEvent[], findings: PoseFinding[]): PointEvent[] {
+  const kept = events.filter((e) => !(e.kind === 'vision' && e.finding?.kind === 'disagree'));
+  if (!findings.length) return kept.length === events.length ? events : kept;
+  const added: PointEvent[] = findings.map((f) => ({ t: f.start, kind: 'vision', text: describeFinding(f), finding: f }));
+  return [...kept, ...added].sort((a, b) => a.t - b.t);
 }
 
 /** The cameras used for a log: the profile's, or the detected ones when the profile has none. */
@@ -52,7 +62,11 @@ async function run(): Promise<void> {
       if (done.get(log.id) === sig && log.cameras !== undefined) continue;
       done.set(log.id, sig);
       const r = await client.cameras(log.id, d);
-      sessionStore.set((st) => ({ logs: st.logs.map((x) => (x.id === log.id ? { ...x, cameras: r.summaries ?? [], fields: r.fields ?? x.fields } : x)) }));
+      sessionStore.set((st) => ({
+        logs: st.logs.map((x) =>
+          x.id === log.id ? { ...x, cameras: r.summaries ?? [], fields: r.fields ?? x.fields, events: withCameraFindings(x.events, r.findings ?? []) } : x,
+        ),
+      }));
       // a renamed or removed camera changes its field names: keep the timeline tracks pointing at fields that exist
       const tracks = sessionStore.get().timelineTracks;
       if (tagsSeenTracksOn(tracks) && tracks.filter((k) => k.startsWith(VISION_PREFIX) && k.endsWith('/TagsSeen')).join() !== tagsSeenKeys().join())

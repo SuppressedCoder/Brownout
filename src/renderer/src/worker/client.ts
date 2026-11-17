@@ -3,6 +3,7 @@
  * `peekSeries` synchronously while drawing and get notified (via subscribe)
  * when a requested series arrives.
  */
+import type { PoseFinding } from '@core/analyzers/poseDeviations';
 import type { Series, FieldInfo } from '@core/log';
 import type { SubsystemDef, SubsystemReport } from '@core/analyzers/subsystems';
 import type { CameraDef, CameraSummary } from '@core/vision';
@@ -20,7 +21,7 @@ class WorkerClient {
   private listeners = new Set<Listener>();
   private subResolvers = new Map<number, (r: { report: SubsystemReport | null; fields?: FieldInfo[] }) => void>();
   private subSeq = 1;
-  private camResolvers = new Map<number, (r: { summaries: CameraSummary[] | null; fields?: FieldInfo[] }) => void>();
+  private camResolvers = new Map<number, (r: { summaries: CameraSummary[] | null; fields?: FieldInfo[]; findings?: PoseFinding[] }) => void>();
   /** Called with load progress for a log being opened. */
   onProgress: ((id: string, stage: LoadStage, fraction: number) => void) | null = null;
 
@@ -49,7 +50,7 @@ class WorkerClient {
       case 'cameras': {
         const r = this.camResolvers.get(msg.seq);
         this.camResolvers.delete(msg.seq);
-        r?.({ summaries: msg.summaries, fields: msg.fields });
+        r?.({ summaries: msg.summaries, fields: msg.fields, findings: msg.findings });
         if (msg.fields) this.notify();
         break;
       }
@@ -122,7 +123,7 @@ class WorkerClient {
   }
 
   /** Rebuild the /Brownout/Vision/... fields for a log's cameras; returns how well each camera saw the field. */
-  cameras(id: string, cameras: CameraDef[]): Promise<{ summaries: CameraSummary[] | null; fields?: FieldInfo[] }> {
+  cameras(id: string, cameras: CameraDef[]): Promise<{ summaries: CameraSummary[] | null; fields?: FieldInfo[]; findings?: PoseFinding[] }> {
     for (const k of [...this.cache.keys()]) if (k.startsWith(`${id}\u0000/Brownout/Vision/`)) this.cache.delete(k);
     return new Promise((resolve) => {
       const seq = this.subSeq++;
