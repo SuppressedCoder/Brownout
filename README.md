@@ -49,14 +49,12 @@ Other commands:
 
 ## Build a real app (installer / standalone .exe)
 
-**Releases are built by GitHub.** Bump `version` in `package.json`, merge, then tag and push:
+**Releases are built by GitHub.** Bump `version` in `package.json` and merge it to `main`, then either:
 
-```bash
-git tag v0.5.1
-git push origin v0.5.1
-```
+- **From the website (works on a phone):** open the repo's **Actions** tab, choose **Release**, tap **Run workflow**, leave the branch on `main`, tick **Make a draft release**, and run it. The workflow tags the commit `v<version>`.
+- **From a terminal:** `git tag v0.5.1` and `git push origin v0.5.1`. The tag must match the version in `package.json`.
 
-`.github/workflows/release.yml` builds the installers on Windows, macOS and Linux and creates a **draft release** with them attached. Open the repo's Releases page, check the draft, and click Publish. A tag with a dash (`v0.6.0-beta.1`) becomes a pre-release. The build stops if the tag doesn't match the version in `package.json`. The same workflow builds (without releasing) on any pull request that changes the packaging setup, and from the Actions tab with "Run workflow".
+`.github/workflows/release.yml` builds the installers on Windows, macOS and Linux (about 10 minutes) and creates a **draft release** with them attached. Open the repo's Releases page, check the draft, and click Publish. A version with a dash (`0.6.0-beta.1`) becomes a pre-release. If you already made a release for the tag on the website, the installers are added to it instead. Running the workflow without ticking the box, or a pull request that changes the packaging setup, only builds the installers.
 
 To build on your own computer instead:
 
