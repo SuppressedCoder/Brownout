@@ -106,6 +106,8 @@ Notes:
 - **Export:** CSV of the active panel's fields over the selection or visible range; any panel copied to the clipboard as a picture (Ctrl+Shift+C, or the picture button on the panel) or saved as a PNG.
 - **Icons:** the interface uses its own icon set (`src/renderer/src/lib/icons.ts`) and no emoji.
 
+**[`docs/features.md`](docs/features.md) describes every feature and how to use it**, including the gestures and keys that are easy to miss.
+
 Specs live in `docs/` (copies of the project docs). `AGENTS.md` explains the architecture rules for coding agents. `HANDOFF.md` is the place to start for whoever continues the work: current state, decisions and their reasons, remaining work in order, known risks.
 
 ## Layout
