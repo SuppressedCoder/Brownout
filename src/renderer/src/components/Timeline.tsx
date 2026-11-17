@@ -5,12 +5,17 @@
  * and bookmarks. Drag the top edge to resize; the button cycles
  * compact / standard / expanded.
  *
- * This is the one place that moves time: click sets the cursor, drag pans,
- * the wheel zooms. The visible range is clamped to the session, so the
- * overview window can't leave the strip.
+ * This is the one place that moves time:
+ * - press or drag in the lanes moves the cursor (scrubbing), snapping to mode changes and bookmarks (Alt: no snap)
+ * - drag the time ruler at the bottom (or middle-drag anywhere) pans, the wheel zooms
+ * - the overview window has grips on both edges; drag them to change how much is shown, drag the middle to move it
+ * - Shift-drag selects a range; drag a selection's edge to adjust it
+ *
+ * The overview covers the match (auto start to teleop end) unless it is switched
+ * to the whole log; its label at the left says which and switches on click.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { sessionStore, sessionExtent, nudgeLog, removeBookmark, removeTimelineTrack, type LogEntry, type SessionState } from '../state/session';
+import { sessionStore, matchExtent, nudgeLog, removeBookmark, removeTimelineTrack, type LogEntry, type SessionState } from '../state/session';
 import {
   timeStore,
   setCursor,
@@ -24,8 +29,13 @@ import {
   setPlaying,
   stepCursor,
   jumpPhase,
+  timeBounds,
+  trimmedToMatch,
+  setWholeLog,
+  fitView,
   type TimeFormat,
 } from '../state/time';
+import { createStore } from '../state/store';
 import { settingsStore } from '../state/settings';
 import { uiStore } from '../state/ui';
 import { useStore } from '../state/store';
@@ -47,7 +57,11 @@ import { bookmarkAtCursor, cycleTimeline } from '../lib/actions';
 import { keyHint } from '../lib/keybinds';
 
 const LABEL_W = 110;
-const OVERVIEW_H = 18;
+const OVERVIEW_H = 24;
+/** Width of the overview window's grips; the grab area is a few px wider on each side. */
+const GRIP_W = 8;
+/** How close (px) a drag must come to a mode change or bookmark to snap to it. */
+const SNAP_PX = 6;
 const LANE_H = 14;
 const AXIS_H = 16;
 const MIN_H = OVERVIEW_H + AXIS_H + 8;
@@ -79,7 +93,7 @@ export function Timeline() {
   const rowsH = useStore(sessionStore, (s) => rowsHeight(s));
   const layoutRef = useRef<Layout>({ x0: LABEL_W, x1: 100, rows: [] });
   const draw = useCallback((dc: DrawContext) => drawTimeline(dc, layoutRef), []);
-  const ref = useCanvas(draw, [timeStore, sessionStore], []);
+  const ref = useCanvas(draw, [timeStore, sessionStore, tlUi], []);
   useTimelineInteraction(ref, layoutRef);
 
   const natural = OVERVIEW_H + 4 + rowsH + AXIS_H + 4;
@@ -188,8 +202,8 @@ function Transport() {
         <ToolGroup>
           <ZoomBox />
         </ToolGroup>
-        <ToolButton onClick={() => zoomTo('full')} title={`Zoom to the full log (${keyHint('zoomFull')})`}>
-          Full
+        <ToolButton onClick={() => zoomTo('match')} title={`Zoom to the match: auto start to the end of teleop (${keyHint('zoomMatch')})`} testId="zoom-match">
+          Match
         </ToolButton>
         <ToolButton low onClick={() => zoomTo('auto')} title={`Zoom to autonomous (${keyHint('zoomAuto')})`}>
           Auto
@@ -210,6 +224,12 @@ function Transport() {
         >
           {(close) => (
             <>
+              <MenuItem
+                label="Whole log"
+                description="Include the time before auto and after the match"
+                hint={keyHint('zoomFull')}
+                onClick={() => (close(), zoomTo('full'))}
+              />
               <MenuItem label="Enabled" hint={keyHint('zoomEnabled')} onClick={() => (close(), zoomTo('enabled'))} />
               <MenuItem label="Endgame (last 20 s)" onClick={() => (close(), zoomTo('endgame'))} />
               <MenuItem label="Selection" hint={keyHint('zoomSelection')} disabled={!hasSel} onClick={() => (close(), zoomTo('selection'))} />
@@ -516,6 +536,140 @@ function stripRuns(
   return runs;
 }
 
+// --- interaction state the canvas draws (hover highlights, drag feedback); not saved ---
+
+type OvPart = 'left' | 'right' | 'box' | 'outside' | 'label';
+type DragKind = 'scrub' | 'pan' | 'select' | 'sel-left' | 'sel-right' | 'nudge' | 'ov-move' | 'ov-left' | 'ov-right';
+
+interface TimelineUi {
+  /** What the pointer is over in the overview strip (its label included). */
+  ovHover: OvPart | null;
+  /** The drag in progress. */
+  drag: DragKind | null;
+  /** Pointer x while dragging, for labels that follow it. */
+  px: number;
+  /** "Q18 nudge +0.35 s" while Alt-dragging a lane. */
+  nudge: string;
+  /** The time the current drag snapped to. */
+  snap: number | null;
+}
+
+const tlUi = createStore<TimelineUi>({ ovHover: null, drag: null, px: 0, nudge: '', snap: null });
+
+interface OvGeom {
+  /** The window's edges in px. */
+  xa: number;
+  xb: number;
+  /** Left x of each grip (GRIP_W wide). */
+  left: [number, number];
+  right: [number, number];
+  /** Grab ranges in px: wider than the grips, but never more than a third into the window. */
+  leftHit: [number, number];
+  rightHit: [number, number];
+}
+
+/**
+ * Where the overview window and its grips are. Grips sit just outside the window, so a
+ * narrow window keeps its middle for moving; at the ends of the strip they move inside.
+ */
+function overviewGeom(x0: number, x1: number, view: [number, number], bounds: [number, number]): OvGeom {
+  const [b0, b1] = bounds;
+  const xOv = (t: number) => x0 + ((t - b0) / (b1 - b0)) * (x1 - x0);
+  const xa = Math.max(x0, Math.min(x1 - 3, xOv(view[0])));
+  const xb = Math.min(x1, Math.max(xa + 3, xOv(view[1])));
+  const inner = Math.min(4, (xb - xa) / 3);
+  const lIn = xa - GRIP_W < x0;
+  const rIn = xb + GRIP_W > x1;
+  const lg = lIn ? xa : xa - GRIP_W;
+  const rg = rIn ? xb - GRIP_W : xb;
+  return {
+    xa,
+    xb,
+    left: [lg, lg + GRIP_W],
+    right: [rg, rg + GRIP_W],
+    leftHit: lIn ? [xa - 4, xa + GRIP_W + inner] : [xa - GRIP_W - 4, xa + inner],
+    rightHit: rIn ? [xb - GRIP_W - inner, xb + 4] : [xb - inner, xb + GRIP_W + 4],
+  };
+}
+
+function ovPartAt(g: OvGeom, x: number): OvPart {
+  const inL = x >= g.leftHit[0] && x <= g.leftHit[1];
+  const inR = x >= g.rightHit[0] && x <= g.rightHit[1];
+  if (inL && inR) return Math.abs(x - g.xa) <= Math.abs(x - g.xb) ? 'left' : 'right';
+  if (inL) return 'left';
+  if (inR) return 'right';
+  if (x > g.xa && x < g.xb) return 'box';
+  return 'outside';
+}
+
+function drawGrip(ctx: CanvasRenderingContext2D, x: number, hot: boolean, pal: ReturnType<typeof T>): void {
+  ctx.fillStyle = hot ? pal.accent : pal.cursor;
+  ctx.beginPath();
+  ctx.roundRect(x, 1, GRIP_W, OVERVIEW_H - 2, 2);
+  ctx.fill();
+  // two ridges, the usual sign for "grab here"
+  ctx.fillStyle = pal.bg;
+  ctx.fillRect(x + 2.5, OVERVIEW_H / 2 - 5, 1, 10);
+  ctx.fillRect(x + GRIP_W - 3.5, OVERVIEW_H / 2 - 5, 1, 10);
+}
+
+/** A small readout box, kept between lo and hi. Returns its [left, right] in px. */
+function pill(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  align: 'left' | 'right' | 'center',
+  lo: number,
+  hi: number,
+  pal: ReturnType<typeof T>,
+): [number, number] {
+  ctx.font = '10px ui-monospace, monospace';
+  const w = ctx.measureText(text).width + 8;
+  const h = 14;
+  let left = align === 'left' ? x : align === 'right' ? x - w : x - w / 2;
+  left = Math.max(lo, Math.min(hi - w, left));
+  ctx.fillStyle = pal.legendBg;
+  ctx.fillRect(left, y, w, h);
+  ctx.strokeStyle = pal.hoverCursor;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(left + 0.5, y + 0.5, w - 1, h - 1);
+  ctx.fillStyle = pal.strong;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, left + 4, y + h / 2);
+  return [left, left + w];
+}
+
+/** Times a drag snaps to: every visible log's mode changes, and the bookmarks. */
+function snapTargets(): number[] {
+  const st = sessionStore.get();
+  const out: number[] = [];
+  for (const l of st.logs) {
+    if (!l.visible) continue;
+    for (const r of l.robotState.ranges) {
+      if (r.mode === 'disabled') continue;
+      out.push(r.start + l.offset, r.end + l.offset);
+    }
+  }
+  for (const b of st.bookmarks) out.push(b.t);
+  return out;
+}
+
+/** The nearest snap target within SNAP_PX of t (secPerPx converts px to seconds), or null. */
+function snapTo(t: number, secPerPx: number, targets: number[]): number | null {
+  let best: number | null = null;
+  let bestD = SNAP_PX * secPerPx;
+  for (const c of targets) {
+    const d = Math.abs(c - t);
+    if (d <= bestD) {
+      bestD = d;
+      best = c;
+    }
+  }
+  return best;
+}
+
 function drawTimeline(dc: DrawContext, layoutRef: React.MutableRefObject<Layout>) {
   const { ctx, width, height, potato } = dc;
   const pal = T();
@@ -526,7 +680,10 @@ function drawTimeline(dc: DrawContext, layoutRef: React.MutableRefObject<Layout>
   layoutRef.current = layout;
   const { x0, x1 } = layout;
   const [t0, t1] = time.view;
-  const [e0, e1] = sessionExtent(st.logs);
+  const [e0, e1] = timeBounds();
+  const ui = tlUi.get();
+  const fmt = time.timeFormat;
+  const primary = st.logs[0];
   const xOf = (t: number) => x0 + ((t - t0) / (t1 - t0)) * (x1 - x0);
   const xOv = (t: number) => x0 + ((t - e0) / (e1 - e0)) * (x1 - x0);
   const fields = fieldIndex(st.logs);
@@ -535,13 +692,28 @@ function drawTimeline(dc: DrawContext, layoutRef: React.MutableRefObject<Layout>
   ctx.fillStyle = pal.bg;
   ctx.fillRect(0, 0, width, height);
 
-  // Overview strip: primary log's modes (solid) and the visible-range box. Everything is
-  // clipped to the strip so it can never paint over the "Overview" label.
-  ctx.fillStyle = pal.fg2;
+  // Overview strip: primary log's modes (solid) and the visible-range window with its grips.
+  // The label says what the strip covers (the match or the whole log) and switches it on click.
+  const canTrim = matchExtent(st.logs) !== null;
   ctx.font = '10px sans-serif';
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
-  ctx.fillText('Overview', x0 - 6, OVERVIEW_H / 2);
+  const ovLabel = canTrim ? (trimmedToMatch() ? 'Match' : 'Whole log') : 'Overview';
+  const labelHot = canTrim && ui.ovHover === 'label';
+  ctx.fillStyle = labelHot ? pal.strong : pal.fg2;
+  ctx.fillText(ovLabel, x0 - 6, OVERVIEW_H / 2);
+  if (canTrim) {
+    // a dotted underline marks it as clickable
+    const w = ctx.measureText(ovLabel).width;
+    ctx.save();
+    ctx.strokeStyle = labelHot ? pal.strong : pal.fg2;
+    ctx.setLineDash([1, 2]);
+    ctx.beginPath();
+    ctx.moveTo(x0 - 6 - w, OVERVIEW_H / 2 + 7.5);
+    ctx.lineTo(x0 - 6, OVERVIEW_H / 2 + 7.5);
+    ctx.stroke();
+    ctx.restore();
+  }
   ctx.save();
   ctx.beginPath();
   ctx.rect(x0, 0, x1 - x0, OVERVIEW_H);
@@ -558,14 +730,21 @@ function drawTimeline(dc: DrawContext, layoutRef: React.MutableRefObject<Layout>
       ctx.fillRect(xOv(r.start + l.offset), OVERVIEW_H - 3 - (i - 1) * 2, Math.max(1, xOv(r.end + l.offset) - xOv(r.start + l.offset)), 1.5);
     }
   }
-  const bx = Math.max(x0, xOv(t0));
-  const bw = Math.max(3, Math.min(x1, xOv(t1)) - bx);
-  ctx.fillStyle = pal.selection;
-  ctx.fillRect(bx, 0, bw, OVERVIEW_H);
-  ctx.strokeStyle = pal.cursor;
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(bx + 0.75, 0.75, bw - 1.5, OVERVIEW_H - 1.5);
+  const g = overviewGeom(x0, x1, time.view, [e0, e1]);
+  // dim what is outside the window, so the shown part stands out
+  ctx.save();
+  ctx.globalAlpha = 0.55;
+  ctx.fillStyle = pal.bg;
+  ctx.fillRect(x0, 0, g.xa - x0, OVERVIEW_H);
+  ctx.fillRect(g.xb, 0, x1 - g.xb, OVERVIEW_H);
+  ctx.restore();
   if (time.cursor !== null) drawCursor(ctx, xOv(time.cursor), 0, OVERVIEW_H, pal.hoverCursor);
+  const boxHot = ui.ovHover === 'box' || ui.drag === 'ov-move';
+  ctx.strokeStyle = boxHot ? pal.accent : pal.cursor;
+  ctx.lineWidth = boxHot ? 2 : 1.5;
+  ctx.strokeRect(g.xa + 0.75, 0.75, g.xb - g.xa - 1.5, OVERVIEW_H - 1.5);
+  drawGrip(ctx, g.left[0], ui.ovHover === 'left' || ui.drag === 'ov-left' || ui.drag === 'ov-move', pal);
+  drawGrip(ctx, g.right[0], ui.ovHover === 'right' || ui.drag === 'ov-right' || ui.drag === 'ov-move', pal);
   ctx.restore();
 
   // Rows
@@ -745,13 +924,73 @@ function drawTimeline(dc: DrawContext, layoutRef: React.MutableRefObject<Layout>
   ctx.rect(x0, yTop, x1 - x0, height - yTop);
   ctx.clip();
   if (time.selection) {
+    const sa = xOf(time.selection[0]);
+    const sb = xOf(time.selection[1]);
     ctx.fillStyle = pal.selection;
-    ctx.fillRect(xOf(time.selection[0]), yTop, xOf(time.selection[1]) - xOf(time.selection[0]), yBot - yTop);
+    ctx.fillRect(sa, yTop, sb - sa, yBot - yTop);
+    // edge lines with small grips: drag them to adjust the selection
+    const selHot = ui.drag === 'sel-left' || ui.drag === 'sel-right' || ui.drag === 'select';
+    ctx.fillStyle = selHot ? pal.accent : pal.hoverCursor;
+    for (const x of [sa, sb]) {
+      ctx.fillRect(Math.round(x) - 0.5, yTop, 1.5, yBot - yTop);
+      ctx.fillRect(Math.round(x) - 2, yTop + (yBot - yTop) / 2 - 7, 4, 14);
+    }
   }
   drawTimeAxis(ctx, x0, x1, yBot, t0, t1, yTop);
+  if (ui.snap !== null && ui.drag && ui.snap >= t0 && ui.snap <= t1) {
+    // where the drag snapped to
+    ctx.fillStyle = pal.accent;
+    ctx.fillRect(Math.round(xOf(ui.snap)) - 1, yTop, 2, yBot - yTop);
+  }
   if (time.cursor !== null && time.cursor >= t0 && time.cursor <= t1) drawCursor(ctx, xOf(time.cursor), yTop, height, pal.cursor);
-  if (time.hover !== null && time.hover >= t0 && time.hover <= t1) drawCursor(ctx, xOf(time.hover), yTop, height, pal.hoverCursor, true);
+  if (time.hover !== null && time.hover >= t0 && time.hover <= t1 && ui.drag !== 'scrub') drawCursor(ctx, xOf(time.hover), yTop, height, pal.hoverCursor, true);
   ctx.restore();
+  // the cursor's tab at the top of the lanes (press or drag anywhere in the lanes to move it)
+  if (time.cursor !== null && time.cursor >= t0 && time.cursor <= t1) {
+    const cx = Math.round(xOf(time.cursor)) + 0.5;
+    ctx.fillStyle = ui.drag === 'scrub' ? pal.accent : pal.cursor;
+    ctx.beginPath();
+    ctx.moveTo(cx - 5, yTop);
+    ctx.lineTo(cx + 5, yTop);
+    ctx.lineTo(cx + 5, yTop + 5);
+    ctx.lineTo(cx, yTop + 9);
+    ctx.lineTo(cx - 5, yTop + 5);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // What a drag is doing, spelled out next to it
+  const tf = (t: number) => formatTimeFor(t, fmt, primary);
+  const pillY = yTop + 2;
+  switch (ui.drag) {
+    case 'ov-left':
+    case 'ov-right':
+    case 'ov-move': {
+      const g = overviewGeom(x0, x1, time.view, [e0, e1]);
+      const [, ra] = pill(ctx, tf(t0), g.xa, pillY, 'right', x0, x1, pal);
+      pill(ctx, tf(t1), g.xb, pillY, 'left', Math.min(x1, ra + 2), x1, pal);
+      pill(ctx, `${formatSpan(t1 - t0)} shown`, (g.xa + g.xb) / 2, pillY + 16, 'center', x0, x1, pal);
+      break;
+    }
+    case 'pan':
+      pill(ctx, tf(t0), x0, yBot - 16, 'left', x0, x1, pal);
+      pill(ctx, tf(t1), x1, yBot - 16, 'right', x0, x1, pal);
+      break;
+    case 'scrub':
+      if (time.cursor !== null) pill(ctx, tf(time.cursor), xOf(time.cursor) + 7, pillY + 8, 'left', x0, x1, pal);
+      break;
+    case 'select':
+    case 'sel-left':
+    case 'sel-right':
+      if (time.selection) {
+        const [a, b] = time.selection;
+        pill(ctx, `${formatSpan(b - a)} selected`, (xOf(a) + xOf(b)) / 2, pillY + 8, 'center', x0, x1, pal);
+      }
+      break;
+    case 'nudge':
+      if (ui.nudge) pill(ctx, ui.nudge, ui.px + 12, pillY + 8, 'left', x0, x1, pal);
+      break;
+  }
   // mode legend
   ctx.font = '9px sans-serif';
   ctx.textAlign = 'left';
@@ -784,49 +1023,99 @@ function useTimelineInteraction(ref: React.RefObject<HTMLCanvasElement | null>, 
     const el = ref.current;
     if (!el) return;
     type Drag =
-      | { kind: 'pan'; startX: number; view: [number, number]; moved: boolean }
+      | { kind: 'scrub'; targets: number[] }
+      | { kind: 'pan'; startX: number; view: [number, number] }
       | { kind: 'select'; startT: number }
+      | { kind: 'sel-left' | 'sel-right'; other: number; targets: number[] }
       | { kind: 'nudge'; log: LogEntry; startX: number; applied: number }
       | { kind: 'ov-move'; startX: number; view: [number, number] }
-      | { kind: 'ov-left'; view: [number, number] }
-      | { kind: 'ov-right'; view: [number, number] };
+      | { kind: 'ov-left' | 'ov-right'; view: [number, number]; targets: number[] };
     let drag: Drag | null = null;
     const pos = (e: PointerEvent | MouseEvent) => {
       const r = el.getBoundingClientRect();
       return { x: e.clientX - r.left, y: e.clientY - r.top };
+    };
+    const lanesBottom = () => el.getBoundingClientRect().height - AXIS_H;
+    const secPerPx = () => {
+      const { x0, x1 } = layoutRef.current;
+      const [a, b] = timeStore.get().view;
+      return (b - a) / (x1 - x0);
+    };
+    const ovSecPerPx = () => {
+      const { x0, x1 } = layoutRef.current;
+      const [a, b] = timeBounds();
+      return (b - a) / (x1 - x0);
     };
     const tOf = (x: number) => {
       const { x0, x1 } = layoutRef.current;
       const [a, b] = timeStore.get().view;
       return a + ((x - x0) / (x1 - x0)) * (b - a);
     };
+    const xOf = (t: number) => {
+      const { x0, x1 } = layoutRef.current;
+      const [a, b] = timeStore.get().view;
+      return x0 + ((t - a) / (b - a)) * (x1 - x0);
+    };
     const tOv = (x: number) => {
       const { x0, x1 } = layoutRef.current;
-      const [a, b] = sessionExtent();
+      const [a, b] = timeBounds();
       return a + ((Math.min(x1, Math.max(x0, x)) - x0) / (x1 - x0)) * (b - a);
     };
+    const geom = () => overviewGeom(layoutRef.current.x0, layoutRef.current.x1, timeStore.get().view, timeBounds());
     const rowAt = (y: number) => layoutRef.current.rows.find((r) => y >= r.y && y < r.y + r.h);
+    /** Which selection edge (if any) is within reach of x, in the lanes. */
+    const selEdgeAt = (x: number): 'sel-left' | 'sel-right' | null => {
+      const sel = timeStore.get().selection;
+      if (!sel) return null;
+      const da = Math.abs(x - xOf(sel[0]));
+      const db = Math.abs(x - xOf(sel[1]));
+      if (Math.min(da, db) > 5) return null;
+      return da <= db ? 'sel-left' : 'sel-right';
+    };
+    /** The time under x, snapped to a mode change or bookmark unless Alt is held. */
+    const snapped = (t: number, alt: boolean, targets: number[], perPx: number): number => {
+      const s = alt ? null : snapTo(t, perPx, targets);
+      tlUi.set({ snap: s });
+      return s ?? t;
+    };
+    const begin = (d: Drag, e: PointerEvent) => {
+      drag = d;
+      el.setPointerCapture(e.pointerId);
+      tlUi.set({ drag: d.kind, px: pos(e).x });
+      setHover(null);
+    };
     const onDown = (e: PointerEvent) => {
-      if (e.button !== 0) return;
+      if (e.button !== 0 && e.button !== 1) return;
       const { x, y } = pos(e);
       const { x0, x1 } = layoutRef.current;
-      el.setPointerCapture(e.pointerId);
       const view = [...timeStore.get().view] as [number, number];
+      // middle button pans anywhere
+      if (e.button === 1) {
+        e.preventDefault();
+        begin({ kind: 'pan', startX: x, view }, e);
+        el.style.cursor = 'grabbing';
+        return;
+      }
       if (y < OVERVIEW_H) {
-        if (x < x0 - 2) return;
-        const [e0, e1] = sessionExtent();
-        const xa = x0 + ((view[0] - e0) / (e1 - e0)) * (x1 - x0);
-        const xb = x0 + ((view[1] - e0) / (e1 - e0)) * (x1 - x0);
-        // inside the box wins over the edge handles when the box is narrow
-        const edge = Math.min(5, Math.max(2, (xb - xa) / 4));
-        if (Math.abs(x - xa) < edge) drag = { kind: 'ov-left', view };
-        else if (Math.abs(x - xb) < edge) drag = { kind: 'ov-right', view };
-        else if (x > xa && x < xb) drag = { kind: 'ov-move', startX: x, view };
-        else {
+        if (x < x0 - 2) {
+          // the label switches between the match and the whole log
+          if (matchExtent() !== null) setWholeLog(trimmedToMatch());
+          return;
+        }
+        const part = ovPartAt(geom(), x);
+        if (part === 'left' || part === 'right') {
+          begin({ kind: part === 'left' ? 'ov-left' : 'ov-right', view, targets: snapTargets() }, e);
+          el.style.cursor = 'ew-resize';
+        } else if (part === 'box') {
+          begin({ kind: 'ov-move', startX: x, view }, e);
+          el.style.cursor = 'grabbing';
+        } else {
+          // outside the window: bring it here, then keep dragging it
           const span = view[1] - view[0];
           const c = tOv(x);
           setView(c - span / 2, c + span / 2);
-          drag = { kind: 'ov-move', startX: x, view: [...timeStore.get().view] as [number, number] };
+          begin({ kind: 'ov-move', startX: x, view: [...timeStore.get().view] as [number, number] }, e);
+          el.style.cursor = 'grabbing';
         }
         return;
       }
@@ -837,65 +1126,112 @@ function useTimelineInteraction(ref: React.RefObject<HTMLCanvasElement | null>, 
         if (row?.kind === 'bookmarks' && e.altKey) for (const b of sessionStore.get().bookmarks) removeBookmark(b.id);
         return;
       }
+      // the time ruler pans
+      if (y >= lanesBottom()) {
+        begin({ kind: 'pan', startX: x, view }, e);
+        el.style.cursor = 'grabbing';
+        return;
+      }
       const row = rowAt(y);
       if (e.altKey && row?.kind === 'mode' && row.log) {
-        drag = { kind: 'nudge', log: row.log, startX: x, applied: 0 };
+        begin({ kind: 'nudge', log: row.log, startX: x, applied: 0 }, e);
+        el.style.cursor = 'grabbing';
         return;
       }
       if (e.shiftKey) {
-        drag = { kind: 'select', startT: tOf(x) };
+        begin({ kind: 'select', startT: tOf(x) }, e);
         return;
       }
-      drag = { kind: 'pan', startX: x, view, moved: false };
+      const edge = selEdgeAt(x);
+      const sel = timeStore.get().selection;
+      if (edge && sel) {
+        begin({ kind: edge, other: edge === 'sel-left' ? sel[1] : sel[0], targets: snapTargets() }, e);
+        el.style.cursor = 'ew-resize';
+        return;
+      }
+      // press moves the cursor at once; dragging scrubs it
+      const targets = snapTargets();
+      begin({ kind: 'scrub', targets }, e);
+      el.style.cursor = 'ew-resize';
+      setCursor(snapped(tOf(Math.min(x1, Math.max(x0, x))), e.altKey, targets, secPerPx()));
+    };
+    const hoverCursor = (x: number, y: number, alt: boolean): string => {
+      const { x0 } = layoutRef.current;
+      if (y < OVERVIEW_H) {
+        if (x < x0 - 2) return matchExtent() !== null ? 'pointer' : 'default';
+        const part = ovPartAt(geom(), x);
+        return part === 'left' || part === 'right' ? 'ew-resize' : part === 'box' ? 'grab' : 'pointer';
+      }
+      if (x < x0) return 'default';
+      if (y >= lanesBottom()) return 'grab';
+      if (alt && rowAt(y)?.kind === 'mode') return 'grab';
+      if (selEdgeAt(x)) return 'ew-resize';
+      return 'crosshair';
     };
     const onMove = (e: PointerEvent) => {
       const { x, y } = pos(e);
       const { x0, x1 } = layoutRef.current;
-      const pxToSec = (dx: number, view: [number, number]) => (dx / (x1 - x0)) * (view[1] - view[0]);
       if (!drag) {
-        setHover(y >= OVERVIEW_H && x >= x0 ? tOf(x) : null);
-        el.style.cursor = y < OVERVIEW_H ? 'ew-resize' : e.altKey && rowAt(y)?.kind === 'mode' ? 'grab' : 'crosshair';
+        setHover(y >= OVERVIEW_H && y < lanesBottom() && x >= x0 ? tOf(x) : null);
+        const ovHover: OvPart | null = y < OVERVIEW_H ? (x < x0 - 2 ? 'label' : ovPartAt(geom(), x)) : null;
+        tlUi.set({ ovHover });
+        el.style.cursor = hoverCursor(x, y, e.altKey);
         return;
       }
+      const pxToSec = (dx: number, view: [number, number]) => (dx / (x1 - x0)) * (view[1] - view[0]);
       switch (drag.kind) {
+        case 'scrub':
+          setCursor(snapped(tOf(Math.min(x1, Math.max(x0, x))), e.altKey, drag.targets, secPerPx()));
+          break;
         case 'pan': {
-          if (Math.abs(x - drag.startX) > 3) drag.moved = true;
-          if (drag.moved) {
-            const dt = pxToSec(x - drag.startX, drag.view);
-            setView(drag.view[0] - dt, drag.view[1] - dt);
-          }
+          const dt = pxToSec(x - drag.startX, drag.view);
+          setView(drag.view[0] - dt, drag.view[1] - dt);
           break;
         }
         case 'select': {
-          const t = tOf(x);
+          const t = tOf(Math.min(x1, Math.max(x0, x)));
           timeStore.set({ selection: [Math.min(drag.startT, t), Math.max(drag.startT, t)] });
+          break;
+        }
+        case 'sel-left':
+        case 'sel-right': {
+          const t = snapped(tOf(Math.min(x1, Math.max(x0, x))), e.altKey, drag.targets, secPerPx());
+          if (Math.abs(t - drag.other) > 1e-3) timeStore.set({ selection: [Math.min(drag.other, t), Math.max(drag.other, t)] });
           break;
         }
         case 'nudge': {
           const want = pxToSec(x - drag.startX, timeStore.get().view);
           nudgeLog(drag.log.id, want - drag.applied);
           drag.applied = want;
+          const l = sessionStore.get().logs.find((q) => q.id === (drag as { log: LogEntry }).log.id);
+          const m = l?.manualOffset ?? 0;
+          tlUi.set({ px: x, nudge: `${l?.name ?? ''} nudge ${m >= 0 ? '+' : ''}${m.toFixed(2)} s` });
           break;
         }
         case 'ov-move': {
-          const [e0, e1] = sessionExtent();
+          const [e0, e1] = timeBounds();
           const dt = ((x - drag.startX) / (x1 - x0)) * (e1 - e0);
           setView(drag.view[0] + dt, drag.view[1] + dt);
           break;
         }
-        case 'ov-left':
-          setView(Math.min(tOv(x), drag.view[1] - 0.05), drag.view[1], 'resize');
+        case 'ov-left': {
+          const t = snapped(tOv(x), e.altKey, drag.targets, ovSecPerPx());
+          setView(Math.min(t, drag.view[1] - 0.05), drag.view[1], 'resize');
           break;
-        case 'ov-right':
-          setView(drag.view[0], Math.max(tOv(x), drag.view[0] + 0.05), 'resize');
+        }
+        case 'ov-right': {
+          const t = snapped(tOv(x), e.altKey, drag.targets, ovSecPerPx());
+          setView(drag.view[0], Math.max(t, drag.view[0] + 0.05), 'resize');
           break;
+        }
       }
     };
     const onUp = (e: PointerEvent) => {
       if (!drag) return;
-      const { x, y } = pos(e);
-      if (drag.kind === 'pan' && !drag.moved && y >= OVERVIEW_H) setCursor(tOf(x));
       drag = null;
+      tlUi.set({ drag: null, snap: null, nudge: '' });
+      const { x, y } = pos(e);
+      el.style.cursor = hoverCursor(x, y, e.altKey);
     };
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
@@ -913,24 +1249,36 @@ function useTimelineInteraction(ref: React.RefObject<HTMLCanvasElement | null>, 
       const [a, b] = timeStore.get().view;
       zoomAround(y < OVERVIEW_H ? (a + b) / 2 : tOf(Math.min(x1, Math.max(x0, x))), factor);
     };
-    const onLeave = () => setHover(null);
+    const onLeave = () => {
+      setHover(null);
+      if (!drag) tlUi.set({ ovHover: null });
+    };
     const onDbl = (e: MouseEvent) => {
       const { y } = pos(e);
-      if (y >= OVERVIEW_H) zoomTo('full');
+      // double-click shows everything the timeline covers (the match, or the whole log)
+      if (y >= OVERVIEW_H) fitView();
+    };
+    // middle-click would start the browser's autoscroll
+    const onAux = (e: MouseEvent) => {
+      if (e.button === 1) e.preventDefault();
     };
     el.addEventListener('pointerdown', onDown);
     el.addEventListener('pointermove', onMove);
     el.addEventListener('pointerup', onUp);
+    el.addEventListener('pointercancel', onUp);
     el.addEventListener('pointerleave', onLeave);
     el.addEventListener('wheel', onWheel, { passive: false });
     el.addEventListener('dblclick', onDbl);
+    el.addEventListener('mousedown', onAux);
     return () => {
       el.removeEventListener('pointerdown', onDown);
       el.removeEventListener('pointermove', onMove);
       el.removeEventListener('pointerup', onUp);
+      el.removeEventListener('pointercancel', onUp);
       el.removeEventListener('pointerleave', onLeave);
       el.removeEventListener('wheel', onWheel);
       el.removeEventListener('dblclick', onDbl);
+      el.removeEventListener('mousedown', onAux);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ref.current]);

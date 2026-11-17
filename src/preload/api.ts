@@ -41,6 +41,13 @@ export interface BrownoutApi {
   pickVideo(): Promise<VideoFile | null>;
   /** Reopen a remembered video by path. Null when the file is gone or is not a video. */
   openVideo(path: string): Promise<VideoFile | null>;
+  /** Video files that could be this log's match video: next to the log (if this run opened it) and in the videos folder. Names and paths only. */
+  listVideosNear(logPath: string | undefined): Promise<{ name: string; path: string }[]>;
+  /** The folder the user keeps match videos in, if set. */
+  getVideoFolder(): Promise<string | null>;
+  /** Choose the videos folder through a dialog. Null if cancelled. */
+  pickVideoFolder(): Promise<string | null>;
+  clearVideoFolder(): Promise<void>;
   /** Print report HTML to a PDF through a save dialog. Returns the saved path, or null if cancelled. */
   exportReport(html: string, defaultName: string): Promise<string | null>;
 }

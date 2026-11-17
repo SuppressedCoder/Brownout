@@ -57,10 +57,13 @@ async function registerVideo(path: string): Promise<{ path: string; name: string
 }
 
 const recent: string[] = [];
+/** Every log file this run has read for the page: the only folders whose videos may be listed for it. */
+const readPaths = new Set<string>();
 let win: BrowserWindow | null = null;
 
 async function loadFile(path: string) {
   const data = await readFile(path);
+  readPaths.add(path);
   if (!recent.includes(path)) recent.unshift(path);
   recent.splice(20);
   return { name: basename(path), path, data: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) };
@@ -146,11 +149,13 @@ function buildMenu() {
     {
       label: 'View',
       submenu: [
-        { label: 'Zoom to full log', click: action('zoomFull') },
+        { label: 'Zoom to the match', click: action('zoomMatch') },
+        { label: 'Zoom to the whole log', click: action('zoomFull') },
         { label: 'Zoom to enabled', click: action('zoomEnabled') },
         { label: 'Zoom to auto', click: action('zoomAuto') },
         { label: 'Zoom to teleop', click: action('zoomTeleop') },
         { type: 'separator' },
+        { label: 'Maximize / restore the active panel', click: action('maximizePanel') },
         { label: 'Toggle sidebar', click: action('toggleSidebar') },
         { label: 'Cycle timeline height', click: action('cycleTimeline') },
         { label: 'Toggle Potato mode', click: action('potato') },
@@ -230,6 +235,43 @@ ipcMain.handle('pick-video', async () => {
 });
 // Reopen a video remembered from an earlier session (video files only; null when it moved)
 ipcMain.handle('open-video', async (_e, path: string) => (typeof path === 'string' ? registerVideo(path) : null));
+
+// Match videos the app may offer: video files next to a log the user opened, and in the one
+// videos folder the user picked here. Only names and paths are listed; a file gets a playable
+// address only when the user accepts it (open-video).
+const videoFolderFile = () => join(app.getPath('userData'), 'video-folder.json');
+async function getVideoFolder(): Promise<string | null> {
+  try {
+    const j = JSON.parse(await readFile(videoFolderFile(), 'utf8')) as { path?: unknown };
+    return typeof j.path === 'string' ? j.path : null;
+  } catch {
+    return null;
+  }
+}
+ipcMain.handle('get-video-folder', () => getVideoFolder());
+ipcMain.handle('pick-video-folder', async () => {
+  const r = await dialog.showOpenDialog(win!, { title: 'Choose the folder where you keep match videos', properties: ['openDirectory'] });
+  if (r.canceled || !r.filePaths[0]) return null;
+  await writeFile(videoFolderFile(), JSON.stringify({ path: r.filePaths[0] }));
+  return r.filePaths[0];
+});
+ipcMain.handle('clear-video-folder', () => rm(videoFolderFile(), { force: true }));
+ipcMain.handle('list-videos-near', async (_e, logPath: unknown) => {
+  const dirs = new Set<string>();
+  if (typeof logPath === 'string' && readPaths.has(logPath)) dirs.add(dirname(logPath));
+  const folder = await getVideoFolder();
+  if (folder) dirs.add(folder);
+  const out: { name: string; path: string }[] = [];
+  for (const d of dirs) {
+    const entries = await readdir(d, { withFileTypes: true }).catch(() => []);
+    for (const e of entries) {
+      if (!e.isFile() || !VIDEO_MIME[extname(e.name).toLowerCase()]) continue;
+      out.push({ name: e.name, path: join(d, e.name) });
+      if (out.length >= 2000) return out;
+    }
+  }
+  return out;
+});
 
 // Match report: the page's HTML is printed to a PDF in a hidden window with scripting off
 ipcMain.handle('export-report', async (_e, html: string, defaultName: string) => {

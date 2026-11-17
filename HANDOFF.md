@@ -1,6 +1,6 @@
 # Brownout handoff
 
-Written 2026-11-16 by the model that built the app so far, and last updated 2026-11-17, after **v0.5.1 was published** and the work moved into the repo on the owner's computer. It is for the model that continues the work, and assumes no memory of the conversations behind it.
+Written 2026-11-16 by the model that built the app so far, and last updated 2026-11-17, after **v0.5.1 was published**, the work moved into the repo on the owner's computer, and the timeline, video sync and maximize work (branch `timeline-video-sync`) was done. It is for the model that continues the work, and assumes no memory of the conversations behind it.
 
 **Where the code is.** On GitHub: **https://github.com/SuppressedCoder/Brownout**. Work from `main`; it holds everything. Pull requests #1 to #5 are merged:
 - #1 added the app in 12 step-by-step commits
@@ -29,7 +29,7 @@ Written 2026-11-16 by the model that built the app so far, and last updated 2026
 3. `docs/implementation-status.md`: what is built, item by item, with honest notes on what is partial.
 4. The spec in `docs/` that matches your task (listed in `AGENTS.md`).
 
-State in one paragraph: the app works end to end, every planned feature from the last two plans is built, and v0.5.1 is released with installers for all three operating systems. `npm run check` (45 unit tests) and `npm run uitest` (181 checks) pass, locally and in CI on GitHub. **One real robot log has been checked:** CURIE Q89 from the 2026 Championship, a DataLogManager log with no AdvantageKit and no battery voltage. It exposed ten real bugs, all fixed in v0.5.1; section 6 lists them. Everything that needs battery voltage or PDH currents has still only been run on the synthetic demo logs. Getting more real logs is the first job (section 7).
+State in one paragraph: the app works end to end, every planned feature from the last two plans is built, and v0.5.1 is released with installers for all three operating systems. `npm run check` (48 unit tests) and `npm run uitest` (210 checks) pass, in CI on GitHub (Linux) and on the owner's Windows 11 computer. **One real robot log has been checked:** CURIE Q89 from the 2026 Championship, a DataLogManager log with no AdvantageKit and no battery voltage. It exposed ten real bugs, all fixed in v0.5.1; section 6 lists them. Everything that needs battery voltage or PDH currents has still only been run on the synthetic demo logs. Getting more real logs is the first job (section 7).
 
 Work on a branch and open a pull request; don't push to `main` unless the owner asks.
 
@@ -105,6 +105,10 @@ Things to know about the tests:
 - Each test run uses a throwaway profile folder through the `BROWNOUT_USER_DATA` environment variable, so it never touches real settings.
 - The renderer exposes its stores on `window.__brownout` (`src/renderer/src/main.tsx`) for the test and for DevTools.
 - **Look at the screenshots.** Passing checks have missed real bugs more than once (section 5, "Testing lessons").
+- **On Windows, from VS Code's terminal** (the owner's setup), two things break the tests that have nothing to do with the code:
+  - VS Code sets `ELECTRON_RUN_AS_NODE=1`, so Electron starts as plain Node and Playwright reports "Process failed to launch!" (`bad option: --remote-debugging-port=0`). Run `env -u ELECTRON_RUN_AS_NODE npm run uitest` in Git Bash, or `Remove-Item Env:ELECTRON_RUN_AS_NODE` first in PowerShell.
+  - Vitest fails every suite with `Cannot read properties of undefined (reading 'config')` when the working folder's drive letter is lower case (`c:\...`, as VS Code opens it): two copies of Vitest get loaded. Run `npm run check` from `C:\Users\...` (in PowerShell: `Set-Location 'C:\Users\...'`).
+  - `npm run smoke` spawns `node_modules/.bin/electron`, a shell script, which Windows cannot run directly. `uitest` covers the same ground; fix `scripts/smoke.mts` to use `electron.cmd` (or `require('electron')`) if it is needed on Windows.
 - **CI runs on GitHub on every push and pull request** (`.github/workflows/ci.yml`): install, demo logs, `npm run check`, bench, build, smoke and the UI test. It has passed on every pull request so far. The runner has no GPU, so CI sets `BROWNOUT_DISABLE_GPU=1` (software rendering). Without it, window captures fail with Chromium's `UnknownVizError`. Set the same variable on any machine without a GPU.
 
 Command-line flags, on the dev build and the packaged app: `--open <file.wpilog>` (repeatable), `--demo`, `--preset <id>` (`quick`, `power`, `autos`, `compare`, `code`, `replay`), `--screenshot <png>`.
@@ -143,6 +147,8 @@ Every series keeps raw log seconds. A log has one number, `offset`, and
 $$t_{\text{aligned}} = t_{\text{raw}} + \text{offset}$$
 
 Panels draw in aligned time. Aligned times are never stored in data. Changing the alignment mode only changes offsets.
+
+The timeline covers the **match** by default: `timeBounds()` in `state/time.ts` is `matchExtent()` from `state/session.ts` (earliest auto start, else first enable, to the latest teleop end, else last disable, 2 s padding) unless `sessionStore.wholeLog` is on, and `sessionExtent()` (all of every log) otherwise. The view, playback and the overview use `timeBounds()`; `setCursor` switches to the whole log by itself when a jump lands outside the match.
 
 Only the timeline moves shared time (cursor, visible range, playback). Panels may offer an explicit "jump to this moment" click and nothing more, unless the user turns on the setting that lets graphs and the field move time. The owner asked for this explicitly.
 
@@ -194,7 +200,9 @@ Analyzers and built-in presets find fields by role (battery voltage, robot pose,
 
   $$t_{\text{video}} = t_{\text{cursor}} - \text{offset} - \text{logMinusVideo}$$
 
-  While playing, the video runs at the timeline's speed and is re-seeked when it drifts more than 0.3 s. The main process serves the file through the `brownout-media://` scheme with byte ranges; each picked file gets an opaque address, and only video file types are accepted.
+  While playing, the video runs at the timeline's speed and is re-seeked when it drifts more than 0.3 s (at most once a second). **Every seek goes through `chaseSeek`** (`lib/videoSeek.ts`): one seek at a time, then straight to the newest target. Setting `currentTime` on every mouse move made Chromium restart from the last keyframe each time, so a dragged phone video showed one frozen frame (measured on a 1080p clip with a keyframe every 10 s: 1 frame shown during a 3 s drag before, 21 after). The main process serves the file through the `brownout-media://` scheme with byte ranges; each picked file gets an opaque address, and only video file types are accepted.
+- **Video sync view** (`components/VideoSync.tsx`, opened by `uiStore.videoSyncFor`): opens after a video is chosen and from the Sync menu. The video and the log are unlinked inside it and it takes the keyboard (Space, arrows, Shift+arrows, comma/period, Enter, Esc), so it never moves shared time; Apply writes the one number, `logMinusVideo = moment − pairedVideoTime`. Markers come from robot state plus the first robot speed above 0.15 m/s (`/Brownout/Pose/Speed`).
+- **Video offering** (`lib/videoOffer.ts`, `core/videoMatch.ts`): when a log opens without a video, the main process lists video files next to the log (only logs it read this run) and in the videos folder from Settings (stored in `userData/video-folder.json`), and the one named like the match (from logged match info, else the file name's `Q12` part) is offered in a message. The empty video panel lists the same matches. "Not now" goes into `brownout.videoOffers.v1`. A file gets a `brownout-media://` address only when the user accepts it.
 - **Robot parts** (`lib/robotDraw.ts`): `drawLayers` is used by both the 2D field and the editor preview. The canvas is already at the robot's center and heading, with +x forward and −y to the robot's left. A picture's top edge is the robot's front. Limits: 24 parts, raster pictures downscaled to 512 px, SVGs up to 300 kB, all stored as inline `data:` URLs.
 - **Match report** (`src/core/report.ts` builds the page, `lib/report.ts` gathers the data): a self-contained page with no scripts and no outside requests, printed by a hidden window with JavaScript off.
 
@@ -253,10 +261,10 @@ New decisions go in the decisions log at the top of `docs/frc-logging-landscape-
 | Controller | unit tests, demo logs, CURIE Q89 (`DS:joystick<N>`; numbering confirmed against the team's own button fields) | AdvantageKit joystick fields in a real log; PlayStation |
 | Commands | unit tests, demo logs, CURIE Q89 (`Scheduler/Names`, 22 commands) | AdvantageKit `Commands*` folders in a real log |
 | PathPlanner paths, swerve | demo logs, CURIE Q89 | |
-| Video | a generated 20 s H.264 clip, on Linux | real match footage, long files, phone formats, Windows, macOS |
+| Video | a generated 20 s H.264 clip, on Linux and Windows 11 (UI test, including the sync view); seek chasing measured on a generated 1080p clip with a keyframe every 10 s | real match footage, long files, phone formats (HEVC), macOS |
 | Match report | one demo log and CURIE Q89, rendered and looked at; one page each | a log with many brownouts or long error text |
 | Performance | `bench`: demo logs about 1 to 1.7 s per 100 MB; CURIE Q89 (71.5 MB) indexed in 0.23 s and opened in the app in about 1 s | a slow laptop; several large logs at once |
-| Platforms | Linux under xvfb only | Windows and macOS, in any form |
+| Platforms | Linux under xvfb; the UI test and unit tests also pass on Windows 11 in a dev checkout (2026-11-17, see section 2 for the two environment fixes) | the installed app on Windows; macOS in any form |
 | Installers | built by the release workflow on GitHub for Windows (installer + portable), macOS (Apple silicon + Intel, DMG and zip) and Linux (AppImage + .deb), all unsigned; published as the v0.5.1 pre-release; one download link checked; the packaged Linux app was launched and opened the demo logs | no installer has been installed or run on Windows or macOS |
 
 ### What the first real log found (all fixed in v0.5.1)
@@ -329,10 +337,10 @@ For each log:
 - Bumper colors in the robot editor. Today bumpers follow the alliance.
 - Draw the robot's parts in the swerve panel too, through `drawLayers`.
 
-**8. Video.**
+**8. Video.** The sync view, seek chasing, a "robot starts moving" marker and offering a video by its name are done (2026-11-17). Left:
+- Try it with real match footage (phone and stream downloads) and ask the owner whether dragging now keeps up. With few keyframes the picture updates about 7 times a second while dragging. If that is not enough, decode frames around the cursor ahead of time: WebCodecs in a worker with mp4box.js (BSD-3-Clause) to read MP4, the same idea as AdvantageScope's frame cache without FFmpeg. That would also give the sync view thumbnails and a sound waveform (the start horn and teleop bell).
 - Detect HEVC and say so before the generic error where possible.
-- Sound is muted on purpose, for autoplay and because several logs may have videos. Consider an unmute button for the selected log.
-- Consider a "sync to the first robot movement" helper that jumps the timeline to the first non-zero drive output.
+- Sound is muted in the panel on purpose; the sync view has a sound switch.
 
 **9. Match report.**
 - Let the user choose sections, and test with a log that has many brownouts to confirm it paginates cleanly.
@@ -352,7 +360,9 @@ Each of these is a self-contained feature. Follow the matching recipe in `AGENTS
 | Drivetrain and Mechanism Tuning presets | `lib/presets.ts`; find fields by role, as the existing six do |
 | Download from the robot, Driver Station folder watching, a log library | main process work; requirements doc section 8, P1 |
 | Export a filtered WPILOG | `src/core/wpilog/writer.ts` exists and is used by tests and the demo generator |
-| SVG export, workspace tabs, pop-out windows | see the status table |
+| SVG export, workspace tabs | see the status table |
+| Pop-out windows | dockview's `addPopoutGroup` keeps one JavaScript context, so stores and loaded logs are shared. **Blocker:** dockview 8.9 refuses `file:` pop-out pages (`UNSAFE_POPOUT_PROTOCOLS`), and the installed app loads from `file://`. Serving the app from its own scheme changes the `localStorage` origin, so settings, presets, profiles and video syncs need moving first (moving them to files under userData would also fix the 5 MB profile limit, section 8). Also: `setWindowOpenHandler` denies all windows; `useCanvas`, `MenuButton`'s portal and the shortcut listener assume the main window; the playback clock runs on the main window's animation frames, which slow down when it is minimized. Do it after the installers have been tried on real machines. |
+| Draw the cursor on its own layer | every hover or cursor move redraws each graph, field and the timeline from scratch (`GraphPanel.tsx`, the cursor is drawn last in the same pass); caching the plot and redrawing only the cursor would cut the per-frame cost during playback and scrubbing |
 | Code signing and auto-update | `docs/brownout-tech-stack.md` section 6 |
 
 ## 8. Known issues and risks
@@ -368,6 +378,8 @@ Each of these is a self-contained feature. Follow the matching recipe in `AGENTS
 - **Profiles live in `localStorage`** (roughly 5 MB per origin). Pictures are inline `data:` URLs. Several large pictures across several profiles could hit the limit, and the save then fails silently (`state/profiles.ts` catches the error). Fix: warn on failure, or move pictures to files under `userData`.
 - **Video paths are remembered as absolute paths.** If the file moves, the panel asks for it again and keeps the sync.
 - **Videos are keyed by log file name.** Two different logs with the same file name would share a video.
+- **The timeline shows the match, not the whole log, by default** (since 2026-11-17). Pre-match and post-match time is one click away (the strip's label, the zoom menu, or `F`), and a console row or finding outside the match switches by itself. A practice log with several enable periods counts first enable to last disable as its "match".
+- **A plain drag in the timeline's lanes now scrubs the cursor** instead of panning (recommended in the plan of 2026-11-17 and built when the owner said to go ahead; they never chose between the two, so ask whether it feels right). Panning is on the time ruler, the middle button, the overview window and the wheel.
 - **The tags-seen track colors** are assigned per distinct value, so a busy camera produces many colors. Readable, not pretty.
 - **With three or more logs at the same spot,** the field's camera lines and labels overlap heavily. The Display menu can turn cameras off.
 - **`npm install` reports vulnerabilities, all in development dependencies** (14 on 2026-11-17: 9 high, 5 moderate), plus some deprecation warnings. Nothing flagged is a runtime dependency — those are only `dockview`, `dockview-react`, `react` and `react-dom` — so none of this code ships inside an installer; it is what builds and tests the app.

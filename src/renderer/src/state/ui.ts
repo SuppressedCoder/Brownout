@@ -63,6 +63,8 @@ export interface UiState {
   camerasFor: string | null;
   /** The robot appearance editor is open, for this robot profile id. */
   robotEditorFor: string | null;
+  /** The video sync view is open, for this log id. */
+  videoSyncFor: string | null;
 }
 
 export const uiStore = createStore<UiState>({
@@ -75,6 +77,7 @@ export const uiStore = createStore<UiState>({
   subsystemsFor: null,
   camerasFor: null,
   robotEditorFor: null,
+  videoSyncFor: null,
 });
 
 function push(d: Dialog): void {

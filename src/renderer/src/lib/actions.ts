@@ -77,7 +77,8 @@ export const ACTIONS: Action[] = [
 
   { id: 'zoomIn', label: 'Zoom in (time)', group: 'Zoom', defaultKey: '=', run: () => zoomBy(1 / 1.5) },
   { id: 'zoomOut', label: 'Zoom out (time)', group: 'Zoom', defaultKey: '-', run: () => zoomBy(1.5) },
-  { id: 'zoomFull', label: 'Zoom to the full log', group: 'Zoom', defaultKey: 'F', run: () => zoomTo('full') },
+  { id: 'zoomMatch', label: 'Zoom to the match (auto start to teleop end)', group: 'Zoom', defaultKey: 'M', run: () => zoomTo('match') },
+  { id: 'zoomFull', label: 'Zoom to the whole log', group: 'Zoom', defaultKey: 'F', run: () => zoomTo('full') },
   { id: 'zoomAuto', label: 'Zoom to autonomous', group: 'Zoom', defaultKey: 'A', run: () => zoomTo('auto') },
   { id: 'zoomTeleop', label: 'Zoom to teleop', group: 'Zoom', defaultKey: 'T', run: () => zoomTo('teleop') },
   { id: 'zoomEnabled', label: 'Zoom to enabled', group: 'Zoom', defaultKey: 'E', run: () => zoomTo('enabled') },
@@ -121,6 +122,7 @@ export const ACTIONS: Action[] = [
     run: () => sessionStore.set((s) => ({ sidebarOpen: !s.sidebarOpen })),
   },
   { id: 'cycleTimeline', label: 'Cycle timeline height', group: 'View', defaultKey: 'Ctrl+T', run: cycleTimeline },
+  { id: 'maximizePanel', label: 'Maximize / restore the active panel', group: 'View', defaultKey: 'Ctrl+Enter', run: () => grid.toggleMaximize() },
   { id: 'potato', label: 'Toggle Potato mode', group: 'View', defaultKey: 'Ctrl+Shift+P', run: togglePotato },
   { id: 'settings', label: 'Settings', group: 'View', defaultKey: 'Ctrl+,', run: () => openSettings() },
   { id: 'help', label: 'Shortcuts and tips', group: 'View', defaultKey: '?', run: () => uiStore.set((s) => ({ helpOpen: !s.helpOpen })) },

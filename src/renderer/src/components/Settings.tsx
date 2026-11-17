@@ -67,6 +67,33 @@ export function SettingsModal() {
   );
 }
 
+/** Where match videos are kept, so Brownout can offer the right one when a log opens. */
+function VideoFolder() {
+  const [folder, setFolder] = useState<string | null>(null);
+  useEffect(() => {
+    void window.brownout?.getVideoFolder().then(setFolder);
+  }, []);
+  return (
+    <div className="setting-row plain">
+      <span>
+        <span className="setting-label">Videos folder</span>
+        <span className="setting-help" data-testid="video-folder">
+          {folder ?? 'Not set.'} When a log opens without a video, Brownout looks next to the log file and in this folder for a video whose name says the match
+          (Q12, qm12, Qual 12, Match 12) and offers it. Nothing opens until you say so.
+        </span>
+      </span>
+      <button className="btn" data-testid="video-folder-pick" onClick={() => void window.brownout?.pickVideoFolder().then((p) => p && setFolder(p))}>
+        Choose…
+      </button>
+      {folder && (
+        <button className="btn" onClick={() => void window.brownout?.clearVideoFolder().then(() => setFolder(null))}>
+          Clear
+        </button>
+      )}
+    </div>
+  );
+}
+
 function Toggle({ checked, onChange, label, help }: { checked: boolean; onChange: (v: boolean) => void; label: string; help?: string }) {
   return (
     <label className="setting-row">
@@ -133,6 +160,13 @@ function General() {
         label="Reopen the last session's logs on launch"
         help={window.brownout ? undefined : 'Desktop app only: the browser build cannot reopen files by path.'}
       />
+
+      {window.brownout && (
+        <>
+          <h3>Match videos</h3>
+          <VideoFolder />
+        </>
+      )}
 
       <h3>Robot &amp; field</h3>
       <div className="setting-row plain">

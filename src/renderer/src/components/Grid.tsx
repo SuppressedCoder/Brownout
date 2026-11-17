@@ -39,6 +39,7 @@ import { runAction } from '../lib/actions';
 import { sessionStore } from '../state/session';
 import { useStore } from '../state/store';
 import { settingsStore } from '../state/settings';
+import { createStore } from '../state/store';
 
 export interface SavedLayout {
   version: 1;
@@ -50,6 +51,8 @@ export interface SavedLayout {
 
 let api: DockviewApi | null = null;
 const layoutListeners = new Set<() => void>();
+/** Whether one panel fills the grid right now (dockview's maximized group). */
+export const maximizedStore = createStore({ maximized: false });
 
 export const grid = {
   get api() {
@@ -94,6 +97,18 @@ export const grid = {
   activePanelId(): string | undefined {
     return api?.activePanel?.id;
   },
+  /** Let one panel fill the grid (the timeline stays), or put it back. Acts on the active panel when no id is given. */
+  toggleMaximize(id?: string): void {
+    if (!api) return;
+    if (api.hasMaximizedGroup()) {
+      api.exitMaximizedGroup();
+      return;
+    }
+    const p = api.getPanel(id ?? api.activePanel?.id ?? '');
+    if (!p) return;
+    p.api.setActive();
+    api.maximizeGroup(p);
+  },
   /** Bring the first panel of a type to the front, or add one. Returns its id. */
   showPanel(type: PanelType): string {
     const existing = api?.panels.find((p) => panelStore.get().panels[p.id]?.type === type);
@@ -116,6 +131,7 @@ const COMPACT_BELOW = 520;
 
 function PanelFrame({ id, Comp }: { id: string; Comp: React.FC<{ id: string }> }) {
   const has = useStore(panelStore, (s) => !!s.panels[id]);
+  const maximized = useStore(maximizedStore, (s) => s.maximized);
   const ref = useRef<HTMLDivElement>(null);
   const compact = useCompactWidth(ref, COMPACT_BELOW);
   const onDragOver = useCallback((e: React.DragEvent) => {
@@ -146,6 +162,17 @@ function PanelFrame({ id, Comp }: { id: string; Comp: React.FC<{ id: string }> }
       <CompactContext.Provider value={compact}>
         <Comp id={id} />
       </CompactContext.Provider>
+      <button
+        className={`max-btn${maximized ? ' on' : ''}`}
+        title={
+          maximized ? 'Show all panels again (double-click the tab, or Ctrl+Enter)' : 'Fill the grid with this panel (double-click the tab, or Ctrl+Enter)'
+        }
+        aria-label={maximized ? 'Restore the panels' : 'Maximize this panel'}
+        data-testid="panel-maximize"
+        onClick={() => grid.toggleMaximize(id)}
+      >
+        <Icon name={maximized ? 'restore' : 'maximize'} size={13} />
+      </button>
       <button
         className="capture-btn"
         title="Copy this panel as an image (Shift-click to save a PNG)"
@@ -230,9 +257,16 @@ export function Grid() {
     e.api.onDidLayoutChange(() => {
       for (const l of layoutListeners) l();
     });
+    e.api.onDidMaximizedGroupChange(() => maximizedStore.set({ maximized: e.api.hasMaximizedGroup() }));
+  }, []);
+  // Double-click a panel's tab to let it fill the grid, and again to put it back.
+  const onDoubleClick = useCallback((e: React.MouseEvent) => {
+    const tab = (e.target as HTMLElement).closest('.dv-tab');
+    if (!tab) return;
+    grid.toggleMaximize();
   }, []);
   return (
-    <div className="grid-host">
+    <div className="grid-host" onDoubleClick={onDoubleClick}>
       <DockviewReact components={components} watermarkComponent={Watermark} onReady={onReady} theme={theme === 'light' ? themeLight : themeDark} />
     </div>
   );

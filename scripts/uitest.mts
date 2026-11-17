@@ -10,7 +10,7 @@
  */
 import { _electron as electron, type ElectronApplication, type Page } from 'playwright-core';
 import { execSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, readFileSync, writeFileSync, copyFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
@@ -67,7 +67,10 @@ async function waitLogs(page: Page, n: number): Promise<void> {
   await page.waitForTimeout(700);
 }
 
-const extent = (page: Page) =>
+/** The range the timeline covers: the match, or the whole log when switched. */
+const extent = (page: Page) => state<[number, number]>(page, 's.timeBounds()');
+/** Every visible log, start to end (aligned). */
+const wholeExtent = (page: Page) =>
   state<[number, number]>(
     page,
     `(() => { const l = s.sessionStore.get().logs; return [Math.min(...l.map(x => x.startTs + x.offset)), Math.max(...l.map(x => x.endTs + x.offset))]; })()`,
@@ -228,7 +231,21 @@ async function main() {
   await page.waitForTimeout(700);
 
   console.log('Timeline');
+  await page.keyboard.press('m');
   const [e0, e1] = await extent(page);
+  const [w0, w1] = await wholeExtent(page);
+  {
+    const v0 = await view(page);
+    check(
+      'the timeline covers the match, not the whole log',
+      !(await state<boolean>(page, 's.sessionStore.get().wholeLog')) &&
+        e0 > w0 + 1 &&
+        e1 < w1 - 1 &&
+        Math.abs(v0[0] - e0) < 1e-6 &&
+        Math.abs(v0[1] - e1) < 1e-6,
+      JSON.stringify({ e0, e1, w0, w1, v0 }),
+    );
+  }
   await page.locator('[data-testid=goto-btn]').click();
   await page.locator('[data-testid=goto-input]').fill('0:30');
   await page.keyboard.press('Enter');
@@ -273,10 +290,98 @@ async function main() {
   await page.mouse.move(tl.x + 600, tl.y + 40);
   for (let i = 0; i < 40; i++) await page.mouse.wheel(0, 300);
   v = await view(page);
-  check('zooming all the way out stops at the session', Math.abs(v[0] - e0) < 1e-6 && Math.abs(v[1] - e1) < 1e-6, JSON.stringify(v));
+  check('zooming all the way out stops at the end of the match', Math.abs(v[0] - e0) < 1e-6 && Math.abs(v[1] - e1) < 1e-6, JSON.stringify(v));
   // click sets the cursor; resize handle
   await page.mouse.click(xOfT(60), tl.y + 40);
   check('clicking the timeline sets the cursor', Math.abs((await state<number>(page, 's.timeStore.get().cursor')) - 60) < 1.5);
+
+  console.log('Timeline: scrub, snap, grips, ruler');
+  const laneY = tl.y + 40;
+  await page.mouse.move(xOfT(20), laneY);
+  await page.mouse.down();
+  check('pressing in the lanes moves the cursor at once', Math.abs((await state<number>(page, 's.timeStore.get().cursor')) - 20) < 1.5);
+  await page.mouse.move(xOfT(45), laneY, { steps: 6 });
+  const midScrub = await state<number>(page, 's.timeStore.get().cursor');
+  await page.screenshot({ path: resolve(outDir, 'ui-timeline-scrub.png') });
+  await page.mouse.up();
+  check('dragging in the lanes scrubs the cursor', Math.abs(midScrub - 45) < 1.5, String(midScrub));
+  // the primary log's auto start is t = 0: a press 3 px away snaps onto it
+  await page.mouse.click(xOfT(0) + 3, laneY);
+  check('the cursor snaps to a mode change', Math.abs(await state<number>(page, 's.timeStore.get().cursor')) < 1e-9);
+  await page.keyboard.down('Alt');
+  await page.mouse.move(xOfT(0) + 3, tl.y + tl.height - 30);
+  await page.keyboard.up('Alt');
+  // ruler pan
+  await page.keyboard.press('m');
+  await page.locator('[data-testid=span-input]').click();
+  await page.locator('[data-testid=span-input]').fill('30');
+  await page.keyboard.press('Enter');
+  const beforePan = await view(page);
+  const rulerY = tl.y + tl.height - 6;
+  const pxPerSec = (tl.width - 118) / (beforePan[1] - beforePan[0]);
+  await page.mouse.move(tl.x + 400, rulerY);
+  await page.mouse.down();
+  await page.mouse.move(tl.x + 400 - 5 * pxPerSec, rulerY, { steps: 5 });
+  await page.mouse.up();
+  const afterPan = await view(page);
+  check(
+    'dragging the time ruler pans by the drag',
+    Math.abs(afterPan[0] - beforePan[0] - 5) < 0.2 && Math.abs(afterPan[1] - afterPan[0] - 30) < 1e-6,
+    JSON.stringify({ beforePan, afterPan }),
+  );
+  // grips on the overview window
+  const ovMid = tl.y + 12;
+  const beforeGrip = await view(page);
+  await page.mouse.move(xOfT(beforeGrip[1]) + 4, ovMid);
+  check(
+    'the pointer turns into a resize arrow over a grip',
+    (await page.locator('[data-testid=timeline-canvas] canvas').evaluate((c) => (c as unknown as { style: { cursor: string } }).style.cursor)) === 'ew-resize',
+  );
+  await page.mouse.down();
+  await page.mouse.move(xOfT(beforeGrip[1] + 20) + 4, ovMid, { steps: 6 });
+  await page.screenshot({ path: resolve(outDir, 'ui-timeline-grip-drag.png') });
+  await page.mouse.up();
+  const afterGrip = await view(page);
+  check(
+    'dragging the right grip moves only the end',
+    Math.abs(afterGrip[0] - beforeGrip[0]) < 1e-6 && afterGrip[1] > beforeGrip[1] + 15,
+    JSON.stringify({ beforeGrip, afterGrip }),
+  );
+  await page.mouse.move(xOfT((afterGrip[0] + afterGrip[1]) / 2), ovMid);
+  check(
+    '...and an open hand over the window',
+    (await page.locator('[data-testid=timeline-canvas] canvas').evaluate((c) => (c as unknown as { style: { cursor: string } }).style.cursor)) === 'grab',
+  );
+  // the label switches between the match and the whole log
+  await page.mouse.click(tl.x + 80, ovMid);
+  const whole = await extent(page);
+  check('clicking "Match" switches the timeline to the whole log', Math.abs(whole[0] - w0) < 1e-6 && Math.abs(whole[1] - w1) < 1e-6, JSON.stringify(whole));
+  await page.screenshot({ path: resolve(outDir, 'ui-timeline-whole-log.png') });
+  await page.mouse.click(tl.x + 80, ovMid);
+  check('...and back to the match', !(await state<boolean>(page, 's.sessionStore.get().wholeLog')));
+  await page.keyboard.press('m');
+  await page.screenshot({ path: resolve(outDir, 'ui-timeline-match.png') });
+
+  console.log('Maximize a panel');
+  {
+    const g0 = await page.locator('.graph-panel canvas').first().boundingBox();
+    await page.locator('.graph-panel').first().hover();
+    await page.locator('.panel-frame:has(.graph-panel) [data-testid=panel-maximize]').first().click();
+    await page.waitForTimeout(400);
+    const g1 = await page.locator('.graph-panel canvas').first().boundingBox();
+    check(
+      'the maximize button lets a panel fill the grid',
+      !!g0 && !!g1 && g1.width > g0.width * 1.3 && g1.height > g0.height * 1.3,
+      JSON.stringify({ g0, g1 }),
+    );
+    check('...with the timeline still there', (await page.locator('[data-testid=timeline-canvas]').count()) === 1);
+    check('...and the preset is not marked as changed', !(await presetText(page)).includes('modified'), await presetText(page));
+    await page.screenshot({ path: resolve(outDir, 'ui-maximized.png') });
+    await page.keyboard.press('Control+Enter');
+    await page.waitForTimeout(400);
+    const g2 = await page.locator('.graph-panel canvas').first().boundingBox();
+    check('Ctrl+Enter puts it back', !!g0 && !!g2 && Math.abs(g2.width - g0.width) < 4, JSON.stringify({ g0, g2 }));
+  }
   const rz = await page.locator('.timeline-resizer').boundingBox();
   if (rz) {
     await page.mouse.move(rz.x + 300, rz.y + 3);
@@ -289,7 +394,7 @@ async function main() {
   await page.evaluate('window.__brownout.sessionStore.set({ timelineHeight: null })');
 
   console.log('Graphs do not move time; value axis zooms on its own');
-  await page.keyboard.press('f');
+  await page.keyboard.press('m');
   const graph = await page.locator('.graph-panel canvas').first().boundingBox();
   if (!graph) throw new Error('no graph');
   const before = await view(page);
@@ -974,6 +1079,44 @@ async function main() {
     'the chosen video loads through the app’s own address',
     (await page.locator('[data-testid=video]').getAttribute('src'))!.startsWith('brownout-media://video/'),
   );
+
+  console.log('Video sync view');
+  check('choosing a video opens the sync view', (await page.locator('[data-testid=video-sync-view]').count()) === 1);
+  await page.waitForFunction(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const v = (globalThis as any).document.querySelector('[data-testid=video-sync-video]');
+    return !!v && v.readyState >= 2;
+  });
+  const svt = () => page.evaluate(`document.querySelector('[data-testid=video-sync-video]').currentTime`) as Promise<number>;
+  check('the sync view offers the log’s auto start', (await page.locator('[data-testid=video-sync-marker-auto]').count()) === 1);
+  const cursorBeforeSync = await state<number | null>(page, 's.timeStore.get().cursor');
+  await page.locator('[data-testid=video-sync-scrub]').fill('3');
+  await page.waitForTimeout(300);
+  await page.locator('[data-testid=video-sync-pair]').focus();
+  for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowRight');
+  await page.waitForTimeout(400);
+  check('arrow keys step the video one frame at a time', Math.abs((await svt()) - (3 + 3 / 30)) < 0.02, String(await svt()));
+  check('...and leave the shared cursor alone', (await state<number | null>(page, 's.timeStore.get().cursor')) === cursorBeforeSync);
+  const drag = (await page.evaluate(
+    `(() => { const el = document.querySelector('[data-testid=video-sync-scrub]'); const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; const s = window.__brownout.seekStats; const r0 = s.requested, i0 = s.issued; for (let i = 0; i <= 60; i++) { set.call(el, String(4 + i * 0.1)); el.dispatchEvent(new Event('input', { bubbles: true })); } return { requested: s.requested - r0, issued: s.issued - i0 }; })()`,
+  )) as { requested: number; issued: number };
+  await page.waitForTimeout(800);
+  check(
+    'dragging the video runs one seek at a time and lands where the drag ended',
+    drag.issued < drag.requested / 4 && Math.abs((await svt()) - 10) < 0.05,
+    JSON.stringify({ ...drag, at: await svt() }),
+  );
+  await page.locator('[data-testid=video-sync-pair]').click();
+  check('pairing says what was paired', (await page.locator('[data-testid=video-sync-status]').innerText()).includes('Paired: video 0:10.00'));
+  await page.screenshot({ path: resolve(outDir, 'ui-video-sync.png') });
+  check('no emoji in the sync view', (await pictographs(page)) === '', await pictographs(page));
+  await page.locator('[data-testid=video-sync-cancel]').click();
+  check(
+    'Cancel closes the view without saving a sync',
+    (await page.locator('[data-testid=video-sync-view]').count()) === 0 &&
+      (await state<number | null>(page, `s.videoStore.get().byLog[s.sessionStore.get().logs[0].fileName].logMinusVideo`)) === null,
+  );
+
   const vt = () => page.evaluate(`document.querySelector('[data-testid=video]').currentTime`) as Promise<number>;
   await page.locator('[data-testid=video-scrub]').fill('2');
   await page.waitForTimeout(400);
@@ -1009,6 +1152,63 @@ async function main() {
   await page.waitForTimeout(300);
   check('...and pauses with it', (await page.evaluate(`document.querySelector('[data-testid=video]').paused`)) === true);
   await page.screenshot({ path: resolve(outDir, 'ui-video.png') });
+
+  // reopen the sync view from the menu: it starts from the saved sync; re-pair auto start with 0:01 and apply
+  await page.locator('[data-testid=video-sync]').click();
+  await page.locator('.menu .menu-item', { hasText: 'Open the sync view' }).click();
+  await page.waitForSelector('[data-testid=video-sync-view]');
+  await page.waitForTimeout(500);
+  check('the sync view starts from the saved sync', (await page.locator('[data-testid=video-sync-status]').innerText()).includes('Paired'));
+  await page.locator('[data-testid=video-sync-marker-auto]').click();
+  await page.locator('[data-testid=video-sync-scrub]').fill('1');
+  await page.waitForTimeout(300);
+  await page.locator('[data-testid=video-sync-pair]').click();
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(200);
+  const applied = await state<{ lmv: number; auto: number }>(
+    page,
+    `(() => { const l = s.sessionStore.get().logs[0]; return { lmv: s.videoStore.get().byLog[l.fileName].logMinusVideo, auto: l.robotState.autoStart }; })()`,
+  );
+  check(
+    'Apply saves "this frame is auto start"',
+    (await page.locator('[data-testid=video-sync-view]').count()) === 0 && Math.abs(applied.lmv - (applied.auto - 1)) < 0.02,
+    JSON.stringify(applied),
+  );
+
+  console.log('Video offering');
+  const videoDir = resolve(outDir, 'ui-videos');
+  rmSync(videoDir, { recursive: true, force: true });
+  mkdirSync(videoDir, { recursive: true });
+  copyFileSync(videoPath, resolve(videoDir, '2026nyroc_qm18.mp4'));
+  copyFileSync(videoPath, resolve(videoDir, 'Q180.mp4')); // a different match
+  copyFileSync(videoPath, resolve(videoDir, 'Practice 18.mp4')); // a different kind of match
+  await app.evaluate(({ dialog }, p) => {
+    dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [p] })) as never;
+  }, videoDir);
+  await page.evaluate(`window.__brownout.uiStore.set({ settingsOpen: true, settingsTab: 'general' })`);
+  await page.locator('[data-testid=video-folder-pick]').click();
+  await page.waitForTimeout(300);
+  check('the videos folder is set in Settings', (await page.locator('[data-testid=video-folder]').innerText()).includes('ui-videos'));
+  await page.keyboard.press('Escape');
+  await page.evaluate(
+    `(() => { const s = window.__brownout; const ps = s.panelStore.get().panels; const id = Object.keys(ps).find(k => ps[k].type === 'video'); s.panelStore.set({ panels: { ...ps, [id]: { ...ps[id], logId: s.sessionStore.get().logs[1].id } } }); })()`,
+  );
+  await page.waitForSelector('[data-testid=video-suggestion]');
+  const suggestions = await page.locator('[data-testid=video-suggestion]').allInnerTexts();
+  check(
+    'the empty video panel suggests the video named like the match, and only it',
+    suggestions.length === 1 && suggestions[0] === 'Use 2026nyroc_qm18.mp4',
+    suggestions.join(', '),
+  );
+  await page.screenshot({ path: resolve(outDir, 'ui-video-suggestion.png') });
+  await page.locator('[data-testid=video-suggestion]').click();
+  await page.waitForSelector('[data-testid=video-sync-view]');
+  const used = await state<string | undefined>(page, `s.videoStore.get().byLog[s.sessionStore.get().logs[1].fileName]?.path`);
+  check('using it attaches the video and opens the sync view', !!used && used.endsWith('2026nyroc_qm18.mp4'), String(used));
+  await page.screenshot({ path: resolve(outDir, 'ui-video-offer.png') });
+  await page.locator('[data-testid=video-sync-cancel]').click();
+  // for session 2: a video for the third demo log, to be offered when the session reopens
+  copyFileSync(videoPath, resolve(videoDir, 'NYROC Q23.mp4'));
 
   console.log('Match report');
   const reportPath = resolve(outDir, 'ui-report.pdf');
@@ -1147,6 +1347,19 @@ async function main() {
   await waitLogs(page, 3);
   const restored = await state<string[]>(page, 's.sessionStore.get().logs.map(l => l.name)');
   check('last session logs reopen on launch', restored.length === 3, restored.join(', '));
+  const offerToast = page.locator('.toast', { hasText: 'Found a video that looks like' });
+  const offered = await offerToast
+    .first()
+    .waitFor({ timeout: 6000 })
+    .then(() => true)
+    .catch(() => false);
+  check(
+    'a log that opens without a video is offered the one named like its match',
+    offered && (await offerToast.count()) === 1 && (await offerToast.innerText()).includes('NYROC Q23.mp4'),
+    offered ? await offerToast.first().innerText() : 'no offer',
+  );
+  if (offered) await offerToast.locator('button', { hasText: 'Not now' }).click();
+  check('"Not now" is remembered', String(await page.evaluate(`localStorage.getItem('brownout.videoOffers.v1') || ''`)).includes('NYROC Q23.mp4'));
   check('settings persisted (rebound key)', (await state<string>(page, 's.settingsStore.get().keybinds.play')) === 'P');
   check('presets persisted', (await state<number>(page, 's.presetStore.get().user.length')) === 2);
   check('active preset remembered', (await presetText(page)) === 'Quick Look', await presetText(page));

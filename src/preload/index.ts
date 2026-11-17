@@ -41,6 +41,10 @@ const api: BrownoutApi = {
   removeField: (id) => ipcRenderer.invoke('remove-field', id) as Promise<void>,
   pickVideo: () => ipcRenderer.invoke('pick-video') as Promise<VideoFile | null>,
   openVideo: (path) => ipcRenderer.invoke('open-video', path) as Promise<VideoFile | null>,
+  listVideosNear: (logPath) => ipcRenderer.invoke('list-videos-near', logPath) as Promise<{ name: string; path: string }[]>,
+  getVideoFolder: () => ipcRenderer.invoke('get-video-folder') as Promise<string | null>,
+  pickVideoFolder: () => ipcRenderer.invoke('pick-video-folder') as Promise<string | null>,
+  clearVideoFolder: () => ipcRenderer.invoke('clear-video-folder') as Promise<void>,
   exportReport: (html, defaultName) => ipcRenderer.invoke('export-report', html, defaultName) as Promise<string | null>,
 };
 
