@@ -1,0 +1,109 @@
+# Builds the installers on Windows, macOS and Linux.
+#
+# - Push a version tag (git tag v0.5.1 && git push origin v0.5.1): builds everything and
+#   creates a draft GitHub release with the installers attached. Review it and click Publish.
+#   The tag must match "version" in package.json.
+# - A pull request that changes the packaging setup builds the installers too (no release),
+#   so a broken build shows up before the next tag.
+# - "Run workflow" on the Actions tab does the same by hand.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  pull_request:
+    paths:
+      - '.github/workflows/release.yml'
+      - 'electron-builder.yml'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'build/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+
+      - name: Check that the tag matches the version in package.json
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          want="${GITHUB_REF_NAME#v}"
+          have="$(node -p "require('./package.json').version")"
+          if [ "$want" != "$have" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $have. Bump the version first, then tag."
+            exit 1
+          fi
+
+      - run: npm ci
+      - run: npm run make-demo
+      - run: npm run check
+      - run: npx electron-vite build
+
+      - name: Build the installers
+        run: npx electron-builder --publish never
+        env:
+          # no code-signing certificate yet: build unsigned instead of looking for one
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ runner.os }}
+          path: |
+            dist/*.exe
+            dist/*.dmg
+            dist/*.zip
+            dist/*.AppImage
+            dist/*.deb
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: installers
+          merge-multiple: true
+
+      - name: Create a draft release with the installers
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          cat > notes.md <<EOF
+          ## Download
+
+          | Computer | File |
+          |---|---|
+          | Windows | \`Brownout-Setup-${version}.exe\` (installer) or \`Brownout-${version}-portable.exe\` (no install) |
+          | Mac with Apple silicon (M1 or later) | \`Brownout-${version}-arm64.dmg\` |
+          | Mac with an Intel processor | \`Brownout-${version}-x64.dmg\` |
+          | Linux | \`Brownout-${version}.AppImage\` or \`brownout_${version}_amd64.deb\` |
+
+          These builds are not code-signed yet:
+          - **Windows** shows "Windows protected your PC": click *More info*, then *Run anyway*.
+          - **macOS** blocks the first launch: right-click the app and choose *Open*. If it says the app is damaged, run \`xattr -cr /Applications/Brownout.app\` in Terminal.
+
+          Brownout was written entirely by AI from its author's ideas; see the README.
+
+          EOF
+          prerelease=""
+          case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease" ;; esac
+          gh release create "$GITHUB_REF_NAME" installers/* \
+            --draft $prerelease \
+            --title "Brownout ${version}" \
+            --notes-file notes.md \
+            --generate-notes
