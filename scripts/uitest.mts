@@ -67,7 +67,10 @@ async function waitLogs(page: Page, n: number): Promise<void> {
   await page.waitForTimeout(700);
 }
 
-const extent = (page: Page) =>
+/** The range the timeline covers: the match, or the whole log when switched. */
+const extent = (page: Page) => state<[number, number]>(page, 's.timeBounds()');
+/** Every visible log, start to end (aligned). */
+const wholeExtent = (page: Page) =>
   state<[number, number]>(
     page,
     `(() => { const l = s.sessionStore.get().logs; return [Math.min(...l.map(x => x.startTs + x.offset)), Math.max(...l.map(x => x.endTs + x.offset))]; })()`,
@@ -228,7 +231,21 @@ async function main() {
   await page.waitForTimeout(700);
 
   console.log('Timeline');
+  await page.keyboard.press('m');
   const [e0, e1] = await extent(page);
+  const [w0, w1] = await wholeExtent(page);
+  {
+    const v0 = await view(page);
+    check(
+      'the timeline covers the match, not the whole log',
+      !(await state<boolean>(page, 's.sessionStore.get().wholeLog')) &&
+        e0 > w0 + 1 &&
+        e1 < w1 - 1 &&
+        Math.abs(v0[0] - e0) < 1e-6 &&
+        Math.abs(v0[1] - e1) < 1e-6,
+      JSON.stringify({ e0, e1, w0, w1, v0 }),
+    );
+  }
   await page.locator('[data-testid=goto-btn]').click();
   await page.locator('[data-testid=goto-input]').fill('0:30');
   await page.keyboard.press('Enter');
@@ -273,10 +290,77 @@ async function main() {
   await page.mouse.move(tl.x + 600, tl.y + 40);
   for (let i = 0; i < 40; i++) await page.mouse.wheel(0, 300);
   v = await view(page);
-  check('zooming all the way out stops at the session', Math.abs(v[0] - e0) < 1e-6 && Math.abs(v[1] - e1) < 1e-6, JSON.stringify(v));
+  check('zooming all the way out stops at the end of the match', Math.abs(v[0] - e0) < 1e-6 && Math.abs(v[1] - e1) < 1e-6, JSON.stringify(v));
   // click sets the cursor; resize handle
   await page.mouse.click(xOfT(60), tl.y + 40);
   check('clicking the timeline sets the cursor', Math.abs((await state<number>(page, 's.timeStore.get().cursor')) - 60) < 1.5);
+
+  console.log('Timeline: scrub, snap, grips, ruler');
+  const laneY = tl.y + 40;
+  await page.mouse.move(xOfT(20), laneY);
+  await page.mouse.down();
+  check('pressing in the lanes moves the cursor at once', Math.abs((await state<number>(page, 's.timeStore.get().cursor')) - 20) < 1.5);
+  await page.mouse.move(xOfT(45), laneY, { steps: 6 });
+  const midScrub = await state<number>(page, 's.timeStore.get().cursor');
+  await page.screenshot({ path: resolve(outDir, 'ui-timeline-scrub.png') });
+  await page.mouse.up();
+  check('dragging in the lanes scrubs the cursor', Math.abs(midScrub - 45) < 1.5, String(midScrub));
+  // the primary log's auto start is t = 0: a press 3 px away snaps onto it
+  await page.mouse.click(xOfT(0) + 3, laneY);
+  check('the cursor snaps to a mode change', Math.abs(await state<number>(page, 's.timeStore.get().cursor')) < 1e-9);
+  await page.keyboard.down('Alt');
+  await page.mouse.move(xOfT(0) + 3, tl.y + tl.height - 30);
+  await page.keyboard.up('Alt');
+  // ruler pan
+  await page.keyboard.press('m');
+  await page.locator('[data-testid=span-input]').click();
+  await page.locator('[data-testid=span-input]').fill('30');
+  await page.keyboard.press('Enter');
+  const beforePan = await view(page);
+  const rulerY = tl.y + tl.height - 6;
+  const pxPerSec = (tl.width - 118) / (beforePan[1] - beforePan[0]);
+  await page.mouse.move(tl.x + 400, rulerY);
+  await page.mouse.down();
+  await page.mouse.move(tl.x + 400 - 5 * pxPerSec, rulerY, { steps: 5 });
+  await page.mouse.up();
+  const afterPan = await view(page);
+  check(
+    'dragging the time ruler pans by the drag',
+    Math.abs(afterPan[0] - beforePan[0] - 5) < 0.2 && Math.abs(afterPan[1] - afterPan[0] - 30) < 1e-6,
+    JSON.stringify({ beforePan, afterPan }),
+  );
+  // grips on the overview window
+  const ovMid = tl.y + 12;
+  const beforeGrip = await view(page);
+  await page.mouse.move(xOfT(beforeGrip[1]) + 4, ovMid);
+  check(
+    'the pointer turns into a resize arrow over a grip',
+    (await page.locator('[data-testid=timeline-canvas] canvas').evaluate((c) => (c as unknown as { style: { cursor: string } }).style.cursor)) === 'ew-resize',
+  );
+  await page.mouse.down();
+  await page.mouse.move(xOfT(beforeGrip[1] + 20) + 4, ovMid, { steps: 6 });
+  await page.screenshot({ path: resolve(outDir, 'ui-timeline-grip-drag.png') });
+  await page.mouse.up();
+  const afterGrip = await view(page);
+  check(
+    'dragging the right grip moves only the end',
+    Math.abs(afterGrip[0] - beforeGrip[0]) < 1e-6 && afterGrip[1] > beforeGrip[1] + 15,
+    JSON.stringify({ beforeGrip, afterGrip }),
+  );
+  await page.mouse.move(xOfT((afterGrip[0] + afterGrip[1]) / 2), ovMid);
+  check(
+    '...and an open hand over the window',
+    (await page.locator('[data-testid=timeline-canvas] canvas').evaluate((c) => (c as unknown as { style: { cursor: string } }).style.cursor)) === 'grab',
+  );
+  // the label switches between the match and the whole log
+  await page.mouse.click(tl.x + 80, ovMid);
+  const whole = await extent(page);
+  check('clicking "Match" switches the timeline to the whole log', Math.abs(whole[0] - w0) < 1e-6 && Math.abs(whole[1] - w1) < 1e-6, JSON.stringify(whole));
+  await page.screenshot({ path: resolve(outDir, 'ui-timeline-whole-log.png') });
+  await page.mouse.click(tl.x + 80, ovMid);
+  check('...and back to the match', !(await state<boolean>(page, 's.sessionStore.get().wholeLog')));
+  await page.keyboard.press('m');
+  await page.screenshot({ path: resolve(outDir, 'ui-timeline-match.png') });
   const rz = await page.locator('.timeline-resizer').boundingBox();
   if (rz) {
     await page.mouse.move(rz.x + 300, rz.y + 3);
@@ -289,7 +373,7 @@ async function main() {
   await page.evaluate('window.__brownout.sessionStore.set({ timelineHeight: null })');
 
   console.log('Graphs do not move time; value axis zooms on its own');
-  await page.keyboard.press('f');
+  await page.keyboard.press('m');
   const graph = await page.locator('.graph-panel canvas').first().boundingBox();
   if (!graph) throw new Error('no graph');
   const before = await view(page);

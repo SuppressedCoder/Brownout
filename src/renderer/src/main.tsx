@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import 'dockview-react/dist/styles/dockview.css';
 import './styles.css';
 import { App } from './App';
-import { timeStore } from './state/time';
+import { timeStore, timeBounds } from './state/time';
 import { sessionStore } from './state/session';
 import { settingsStore } from './state/settings';
 import { panelStore } from './state/panels';
@@ -22,6 +22,8 @@ import { videoStore } from './state/videos';
   uiStore,
   profileStore,
   videoStore,
+  /** The range the timeline covers right now (the match or the whole log). */
+  timeBounds,
 };
 
 createRoot(document.getElementById('root')!).render(

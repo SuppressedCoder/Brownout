@@ -146,7 +146,8 @@ function buildMenu() {
     {
       label: 'View',
       submenu: [
-        { label: 'Zoom to full log', click: action('zoomFull') },
+        { label: 'Zoom to the match', click: action('zoomMatch') },
+        { label: 'Zoom to the whole log', click: action('zoomFull') },
         { label: 'Zoom to enabled', click: action('zoomEnabled') },
         { label: 'Zoom to auto', click: action('zoomAuto') },
         { label: 'Zoom to teleop', click: action('zoomTeleop') },

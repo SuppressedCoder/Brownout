@@ -4,11 +4,12 @@
  * directly and redraw in requestAnimationFrame; React only reads it for the
  * readouts.
  *
- * The visible range never leaves the session's extent (earliest log start to
- * latest log end), so the overview window can't be dragged off either side.
+ * The visible range never leaves the timeline's range: the match (auto start
+ * to teleop end, see matchExtent) unless the timeline is set to the whole log,
+ * so the overview window can't be dragged off either side.
  */
 import { createStore } from './store';
-import { sessionStore, sessionExtent } from './session';
+import { sessionStore, sessionExtent, matchExtent } from './session';
 import { settingsStore } from './settings';
 import { clampWindow } from '@core/alignment';
 
@@ -38,13 +39,39 @@ export const timeStore = createStore<TimeState>({
 
 export const MIN_SPAN = 0.01;
 
+/** The range the timeline covers: the match, or the whole log when switched (or when there is no match). */
+export function timeBounds(): [number, number] {
+  if (sessionStore.get().wholeLog) return sessionExtent();
+  return matchExtent() ?? sessionExtent();
+}
+
+/** Whether the timeline is trimmed to the match right now. */
+export function trimmedToMatch(): boolean {
+  return !sessionStore.get().wholeLog && matchExtent() !== null;
+}
+
+/** Show the whole log or only the match. The view is clamped to the new range. */
+export function setWholeLog(whole: boolean): void {
+  if (sessionStore.get().wholeLog !== whole) sessionStore.set({ wholeLog: whole });
+}
+
+/** Fit the view to the timeline's range (after logs open or the alignment changes). */
+export function fitView(): void {
+  const [a, b] = timeBounds();
+  timeStore.set({ view: [a, b] });
+}
+
 export function setCursor(t: number | null): void {
   if (t === null) {
     timeStore.set({ cursor: null });
     return;
   }
   const [a, b] = sessionExtent();
-  timeStore.set({ cursor: Math.min(b, Math.max(a, t)) });
+  const c = Math.min(b, Math.max(a, t));
+  // A jump to a moment outside the match (a console row before auto, say) shows the whole log.
+  const [ba, bb] = timeBounds();
+  if (c < ba || c > bb) setWholeLog(true);
+  timeStore.set({ cursor: c });
 }
 
 /**
@@ -59,7 +86,7 @@ export function setHover(t: number | null): void {
 
 /** Set the visible range. 'pan' keeps the span and slides it inside the session; 'resize' clamps each edge. */
 export function setView(a: number, b: number, mode: 'pan' | 'resize' = 'pan'): void {
-  const [ea, eb] = sessionExtent();
+  const [ea, eb] = timeBounds();
   const v = clampWindow(a, b, ea, eb, mode, MIN_SPAN);
   if (!v) return;
   const cur = timeStore.get().view;
@@ -69,7 +96,7 @@ export function setView(a: number, b: number, mode: 'pan' | 'resize' = 'pan'): v
 
 /** Re-fit the current view after the session extent changed (logs added, removed, re-aligned). */
 export function reclampView(): void {
-  const [ea, eb] = sessionExtent();
+  const [ea, eb] = timeBounds();
   const [a, b] = timeStore.get().view;
   if (b <= ea || a >= eb) {
     timeStore.set({ view: [ea, eb] });
@@ -119,7 +146,7 @@ export function gotoTime(t: number): void {
   }
 }
 
-export type ZoomTarget = 'full' | 'enabled' | 'auto' | 'teleop' | 'endgame' | 'selection';
+export type ZoomTarget = 'full' | 'match' | 'enabled' | 'auto' | 'teleop' | 'endgame' | 'selection';
 
 export function zoomTo(target: ZoomTarget): void {
   const st = sessionStore.get();
@@ -130,8 +157,14 @@ export function zoomTo(target: ZoomTarget): void {
     return;
   }
   if (target === 'full') {
+    setWholeLog(true);
     const [a, b] = sessionExtent();
     timeStore.set({ view: [a, b] });
+    return;
+  }
+  if (target === 'match') {
+    setWholeLog(false);
+    fitView();
     return;
   }
   let a = Infinity;
@@ -153,6 +186,9 @@ export function zoomTo(target: ZoomTarget): void {
   }
   if (!Number.isFinite(a)) return;
   const pad = (b - a) * 0.03;
+  // a phase outside the match range (a second enable after the match) needs the whole log
+  const [ba, bb] = timeBounds();
+  if (a < ba || b > bb) setWholeLog(true);
   setView(a - pad, b + pad, 'resize');
 }
 
@@ -177,7 +213,7 @@ function tick(ts: number) {
   const dt = lastTs ? Math.min(0.25, (ts - lastTs) / 1000) : 0;
   lastTs = ts;
   let cur = (t.cursor ?? t.view[0]) + dt * t.speed;
-  const [e0, e1] = sessionExtent();
+  const [e0, e1] = timeBounds();
   const end = t.loop && t.selection ? t.selection[1] : e1;
   const start = t.loop && t.selection ? t.selection[0] : e0;
   if (cur >= end) {
@@ -202,7 +238,7 @@ export function setPlaying(playing: boolean): void {
   const t = timeStore.get();
   if (playing === t.playing) return;
   if (playing) {
-    const [e0, e1] = sessionExtent();
+    const [e0, e1] = timeBounds();
     // restart from the beginning when play is pressed at the very end
     const cursor = t.cursor === null ? t.view[0] : t.cursor >= e1 - 1e-6 ? e0 : t.cursor;
     timeStore.set({ playing: true, hover: null, cursor });

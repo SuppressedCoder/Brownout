@@ -10,7 +10,7 @@ import { computeOffset, type AlignMode } from '@core/alignment';
 import { SEASONS, type AprilTag, type SeasonPreset } from '@core/field';
 import type { Role } from '@core/roles';
 import { shortName } from '../lib/format';
-import { timeStore, zoomTo, reclampView } from './time';
+import { timeStore, fitView, reclampView, timeBounds } from './time';
 import { settingsStore } from './settings';
 import type { LoadStage } from '../worker/protocol';
 import type { SubsystemReport } from '@core/analyzers/subsystems';
@@ -67,6 +67,8 @@ export interface SessionState {
   timelineHeight: number | null;
   /** Extra timeline tracks the user added: field keys. */
   timelineTracks: string[];
+  /** The timeline covers the whole log; false = only the match (auto start to teleop end), when the logs have one. */
+  wholeLog: boolean;
 }
 
 export interface LoadingItem {
@@ -95,6 +97,7 @@ export const sessionStore = createStore<SessionState>({
   timelineMode: 'standard',
   timelineHeight: null,
   timelineTracks: [],
+  wholeLog: false,
 });
 
 let nextLogId = 1;
@@ -162,7 +165,7 @@ export async function openSources(sources: LogSource[], onError?: (name: string,
   if (!sources.length) return [];
   const s = sessionStore.get();
   const wasEmpty = s.logs.length === 0;
-  const prevExtent = sessionExtent(s.logs);
+  const prevExtent = timeBounds();
   const prevView = timeStore.get().view;
   const tol = (prevExtent[1] - prevExtent[0]) * 0.02;
   const wasFull = Math.abs(prevView[0] - prevExtent[0]) < tol && Math.abs(prevView[1] - prevExtent[1]) < tol;
@@ -220,7 +223,7 @@ export async function openSources(sources: LogSource[], onError?: (name: string,
       onError?.(it.name, e instanceof Error ? e.message : String(e));
     }
   }
-  if ((wasEmpty || wasFull) && sessionStore.get().logs.length) zoomTo('full');
+  if ((wasEmpty || wasFull) && sessionStore.get().logs.length) fitView();
   return failed;
 }
 
@@ -248,7 +251,7 @@ export function closeAll(): void {
 
 export function setAlignMode(mode: AlignMode): void {
   sessionStore.set((st) => ({ alignMode: mode, logs: recomputeOffsets(st.logs, mode) }));
-  zoomTo('full');
+  fitView();
 }
 
 export function nudgeLog(id: string, deltaSeconds: number): void {
@@ -361,11 +364,40 @@ export function sessionExtent(logs = sessionStore.get().logs): [number, number] 
   return [a, b];
 }
 
-// Keep the visible range inside the session whenever logs are added, removed, hidden or re-aligned.
+const MATCH_PAD = 2;
+
+/**
+ * The match across visible logs: earliest auto start (else first enable) to the latest
+ * teleop end (else last disable), 2 s padding each side, inside the session extent.
+ * Null when no log has robot-mode data.
+ */
+export function matchExtent(logs = sessionStore.get().logs): [number, number] | null {
+  let a = Infinity;
+  let b = -Infinity;
+  for (const l of logs) {
+    if (!l.visible) continue;
+    const rs = l.robotState;
+    const start = rs.autoStart ?? rs.firstEnable;
+    const end = rs.teleopEnd ?? rs.lastDisable;
+    if (start === undefined || end === undefined || !(end > start)) continue;
+    a = Math.min(a, start + l.offset);
+    b = Math.max(b, end + l.offset);
+  }
+  if (!Number.isFinite(a)) return null;
+  const [e0, e1] = sessionExtent(logs);
+  const lo = Math.max(e0, a - MATCH_PAD);
+  const hi = Math.min(e1, b + MATCH_PAD);
+  return hi - lo >= 1 ? [lo, hi] : null;
+}
+
+// Keep the visible range inside the timeline's range whenever logs are added, removed, hidden or
+// re-aligned, or the timeline switches between the match and the whole log.
 let lastLogs: LogEntry[] = sessionStore.get().logs;
+let lastWhole = sessionStore.get().wholeLog;
 sessionStore.subscribe((st) => {
-  if (st.logs === lastLogs) return;
+  if (st.logs === lastLogs && st.wholeLog === lastWhole) return;
   lastLogs = st.logs;
+  lastWhole = st.wholeLog;
   reclampView();
 });
 
