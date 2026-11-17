@@ -2,7 +2,9 @@
 
 Written 2026-11-16 at v0.5.0 and updated for v0.5.1 (checked against the first real robot log) by the model that built the app so far, for the model that continues it. It assumes no memory of the conversations behind it.
 
-**Where the code is.** The source is the `brownout.zip` the owner holds (v0.5.1, the last one delivered, with this file in it). The Claude Project named "Brownout" holds only documents: this handoff, the status and plan, and five specs. If you start in a workspace with no `brownout/` folder, ask the owner to attach their latest `brownout.zip`, unzip it, and run the commands in section 2. Do not rebuild the app from the documents.
+**Where the code is.** On GitHub: **https://github.com/SuppressedCoder/Brownout**. The app was added on the branch `brownout-v0.5.1` in 12 step-by-step commits, plus one CI fix, as pull request #1 into `main`. Check whether #1 has been merged before you start; if it has, work from `main`. The owner also holds a `brownout.zip` of the same code. The Claude Project named "Brownout" holds only documents: this handoff, the status and plan, and five specs. Do not rebuild the app from the documents.
+
+To push from a Claude session, the session needs the repo attached with push access, and the Claude GitHub App installed on the SuppressedCoder account (it is, as of 2026-11-16). GitHub's GraphQL API is not available from these sessions, so `gh pr create` fails; open pull requests with `gh api repos/SuppressedCoder/Brownout/pulls --method POST`.
 
 ## 0. Read this first
 
@@ -13,7 +15,7 @@ Written 2026-11-16 at v0.5.0 and updated for v0.5.1 (checked against the first r
 
 State in one paragraph: the app works end to end and every planned feature from the last two plans is built. `npm run check` (45 unit tests) and `npm run uitest` (181 checks) pass. **One real robot log has been checked:** CURIE Q89 from the 2026 Championship, a DataLogManager log with no AdvantageKit and no battery voltage. It exposed ten real bugs, all fixed in v0.5.1; section 6 lists them. Everything that needs battery voltage or PDH currents has still only been run on the synthetic demo logs. Getting more real logs is the first job (section 7).
 
-The repository is **not under git** yet. Run `git init` and commit before changing anything.
+Work on a branch and open a pull request; don't push to `main` unless the owner asks.
 
 ## 1. What Brownout is
 
@@ -85,7 +87,7 @@ Things to know about the tests:
 - Each test run uses a throwaway profile folder through the `BROWNOUT_USER_DATA` environment variable, so it never touches real settings.
 - The renderer exposes its stores on `window.__brownout` (`src/renderer/src/main.tsx`) for the test and for DevTools.
 - **Look at the screenshots.** Passing checks have missed real bugs more than once (section 5, "Testing lessons").
-- `.github/workflows/ci.yml` exists but has never run, because the project has never been pushed anywhere.
+- **CI runs on GitHub on every push and pull request** (`.github/workflows/ci.yml`): install, demo logs, `npm run check`, bench, build, smoke and the UI test. It passed on PR #1. The runner has no GPU, so CI sets `BROWNOUT_DISABLE_GPU=1` (software rendering). Without it, window captures fail with Chromium's `UnknownVizError`. Set the same variable on any machine without a GPU.
 
 Command-line flags, on the dev build and the packaged app: `--open <file.wpilog>` (repeatable), `--demo`, `--preset <id>` (`quick`, `power`, `autos`, `compare`, `code`, `replay`), `--screenshot <png>`.
 
@@ -262,10 +264,7 @@ Also from that pass:
 
 ### P0: do these first
 
-**1. Put the project under git.**
-- `git init`, check `.gitignore`, commit everything as v0.5.0.
-- Commit after each step that works from then on.
-- If it is pushed to GitHub, watch the first CI run. It has never run, and it needs `ffmpeg` on the runner for the video test.
+**1. Merge pull request #1.** It adds the whole app to `main` on GitHub; CI passed. If the owner hasn't merged it, ask them to. "Rebase and merge" or "Create a merge commit" keeps the 12 steps; "Squash" collapses them into one.
 
 **2. Get more real logs.** One real log has been checked (section 6). Ask the owner for any of these; each covers features that have only run on synthetic data:
 - a log with battery voltage, total current or PDH channel currents, for brownouts, battery health and the subsystem math with real voltage
@@ -352,7 +351,6 @@ Each of these is a self-contained feature. Follow the matching recipe in `AGENTS
 - **The tags-seen track colors** are assigned per distinct value, so a busy camera produces many colors. Readable, not pretty.
 - **With three or more logs at the same spot,** the field's camera lines and labels overlap heavily. The Display menu can turn cameras off.
 - **`npm install` reports six moderate vulnerabilities and some deprecation warnings.** They come from development dependencies; which packages was not investigated. Do not run `npm audit fix --force`: it upgrades across major versions and breaks the build.
-- **`package.json` has placeholder `homepage` and `repository` URLs** (`your-team/brownout`).
 - **Electron 45 specifics:** there is no `clipboard.writeImage`; `lib/capture.ts` uses `clipboard.write([new ClipboardItem(...)])`. H.264 playback relies on the codecs Electron ships.
 - **"Error: Electron uninstall"** on first run means the Electron binary did not download. `scripts/ensure-electron.mjs` handles it; behind a proxy, set `ELECTRON_MIRROR`. The owner hit this once.
 
@@ -375,7 +373,7 @@ Each of these is a self-contained feature. Follow the matching recipe in `AGENTS
 4. Update `README.md`, `AGENTS.md` if a rule changed, `docs/implementation-status.md`, and this file (sections 6 to 8).
 5. The Claude Project holds copies of the docs under `claude/` (`brownout-implementation-status.md`, `brownout-next-version-plan.md`, `HANDOFF.md`, and the five specs). Update the copy whenever the file in `docs/` changes.
 6. Bump `version` in `package.json` and in the first two `version` fields of `package-lock.json`. Do not search-and-replace version strings in the lockfile: dependency versions can collide with the app's.
-7. Commit. Build the zip from the parent folder:
+7. Commit on a branch, push, and open a pull request; CI must pass. If the owner also wants a zip, build it from the parent folder:
 
 ```bash
 zip -qr brownout.zip brownout -x "brownout/node_modules/*" "brownout/out/*" "brownout/dist/*" \
