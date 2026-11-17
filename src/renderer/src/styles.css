@@ -197,6 +197,124 @@ code {
   min-width: 0;
   position: relative;
 }
+.grid-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+
+/* Views: Video review and Power (components/Views.tsx) */
+.app-view {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg2);
+}
+.view-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fg2);
+}
+.standalone-panel {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--bg);
+}
+.vr-main {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+.vr-moments {
+  flex: 0 0 auto;
+  max-height: 30%;
+  min-height: 72px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+}
+.vr-moments-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+.vr-moments-head .hint {
+  padding: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vr-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.vr-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 3px 8px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  color: var(--fg);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.vr-item:hover {
+  background: var(--active-bg);
+}
+.vr-when {
+  flex: 0 0 auto;
+  min-width: 96px;
+}
+.vr-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vr-none {
+  padding: 8px;
+}
+.power-view .pv-graph {
+  flex: 0 0 38%;
+  min-height: 0;
+  display: flex;
+}
+.power-view .pv-report {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.power-view .standalone-panel {
+  flex: 1;
+}
+/* a narrow window stacks the video above the field */
+@media (max-width: 900px) {
+  .vr-main {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
+  }
+}
 .grid-host > div {
   height: 100%;
 }

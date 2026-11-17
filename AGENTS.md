@@ -47,6 +47,7 @@ npm run dev       # run the app
 ## Adding things
 
 - **New panel:** settings interface + `defaultSettings` + a `PANEL_CATALOG` entry in `state/panels.ts` → component in `panels/` → register in `Grid.tsx` → menu entry in `src/main/index.ts` → optionally a built-in preset in `lib/presets.ts`. View state that shouldn't mark a preset “(modified)” goes in `VIEW_KEYS` in `state/presets.ts`.
+- **New view** (a fixed full-window layout like Video review or Power): a value in `AppView` (`state/session.ts`), a component in `components/Views.tsx` placing `StandalonePanel`s, a button in the header's view switch, an action and a View menu entry. Its panels use ids starting with `view:` (`VIEW_PANEL_PREFIX`), created with `ensurePanel`; they are never saved into layouts or presets, so anything that walks all panel settings must skip them (`isViewPanel`).
 - **New command / shortcut:** one entry in `ACTIONS` (`lib/actions.ts`).
 - **New per-robot setting:** a field in `RobotProfile` with a default in `blankProfile()` and a guard in `normalizeProfile()` (`state/profiles.ts`), a control in `components/RobotSettings.tsx`.
 - **New field season:** add the picture and tag JSON under `src/renderer/src/assets/fields/`, an entry in `fields.json`, the imports in `lib/fieldAssets.ts`, and the season in `SEASONS` (`src/core/field.ts`).

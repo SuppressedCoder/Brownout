@@ -22,6 +22,7 @@ import { startVisionAnalysis } from './lib/vision';
 import { CameraEditorModal } from './components/CameraEditor';
 import { RobotEditorModal } from './components/RobotEditor';
 import { VideoSyncModal } from './components/VideoSync';
+import { VideoReview, PowerView } from './components/Views';
 import { startVideoOffers } from './lib/videoOffer';
 import { addCustomField } from './lib/fieldAssets';
 
@@ -30,6 +31,7 @@ const NARROW = 980;
 
 export function App() {
   const sidebarOpen = useStore(sessionStore, (s) => s.sidebarOpen);
+  const view = useStore(sessionStore, (s) => s.view);
   const helpOpen = useStore(uiStore, (s) => s.helpOpen);
   const settingsOpen = useStore(uiStore, (s) => s.settingsOpen);
   const logCount = useStore(sessionStore, (s) => s.logs.length);
@@ -153,8 +155,13 @@ export function App() {
     <div className="app">
       <Header />
       <div className="body">
-        {sidebarOpen && <Sidebar />}
-        <Grid />
+        {sidebarOpen && view === 'panels' && <Sidebar />}
+        {/* the grid stays mounted (hidden) in the other views, so its layout is kept */}
+        <div className="grid-wrap" style={view === 'panels' ? undefined : { display: 'none' }}>
+          <Grid />
+        </div>
+        {view === 'video' && <VideoReview />}
+        {view === 'power' && <PowerView />}
       </div>
       <Timeline />
       {helpOpen && <Help />}

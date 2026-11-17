@@ -206,6 +206,13 @@ export function newPanelId(type: PanelType): string {
   return `${type}-${Date.now().toString(36)}-${nextPanel++}`;
 }
 
+/**
+ * Panels that belong to a view (Video review, Power) rather than the grid. Their settings live in
+ * the panel store like any panel's, but are never saved into layouts or presets.
+ */
+export const VIEW_PANEL_PREFIX = 'view:';
+export const isViewPanel = (id: string): boolean => id.startsWith(VIEW_PANEL_PREFIX);
+
 export function ensurePanel(id: string, type: PanelType, init?: Partial<PanelSettings>): void {
   panelStore.set((st) => {
     if (st.panels[id]) return {};

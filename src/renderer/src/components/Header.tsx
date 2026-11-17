@@ -31,12 +31,13 @@ import { ToolButton, ToolSelect, ToolSpacer, ToolGroup, OverflowRow, useCompactW
 import { Icon, Caret } from './Icon';
 import { MenuButton, MenuItem, MenuSeparator, MenuLabel } from './Menu';
 import { fileSize } from '../lib/format';
-import { runAction, togglePotato } from '../lib/actions';
+import { runAction, togglePotato, showView } from '../lib/actions';
 import { keyHint } from '../lib/keybinds';
 
 const STAGE_LABEL: Record<LoadingItem['stage'], string> = { read: 'reading', index: 'indexing', analyze: 'analyzing' };
 
 export function Header() {
+  const view = useStore(sessionStore, (s) => s.view);
   const logs = useStore(sessionStore, (s) => s.logs);
   const alignMode = useStore(sessionStore, (s) => s.alignMode);
   const loading = useStore(sessionStore, (s) => s.loadingItems);
@@ -125,6 +126,38 @@ export function Header() {
       </span>
       <OverflowRow className="hdr-right" compact={compact} testId="header-more" moreTitle="More: alignment, Potato mode, shortcuts">
         <ToolSpacer />
+        <ToolGroup className="view-switch">
+          <ToolButton
+            icon="blocks"
+            text="Panels"
+            active={view === 'panels'}
+            onClick={() => showView('panels')}
+            title={`Your panels and layouts (${keyHint('viewPanels')})`}
+            testId="view-panels"
+          >
+            <span className="hdr-text">Panels</span>
+          </ToolButton>
+          <ToolButton
+            icon="video"
+            text="Video review"
+            active={view === 'video'}
+            onClick={() => showView('video')}
+            title={`Video review: the match video next to the field, and the moments to check (${keyHint('viewVideo')})`}
+            testId="view-video"
+          >
+            <span className="hdr-text">Video</span>
+          </ToolButton>
+          <ToolButton
+            icon="power"
+            text="Power"
+            active={view === 'power'}
+            onClick={() => showView('power')}
+            title={`Power: what used the battery, by subsystem, and what caused each brownout (${keyHint('viewPower')})`}
+            testId="power-btn"
+          >
+            <span className="hdr-text">Power</span>
+          </ToolButton>
+        </ToolGroup>
         <ToolGroup low className="hdr-label">
           Align
           <ToolSelect
@@ -134,124 +167,119 @@ export function Header() {
             title={ALIGN_MODES.find((m) => m.id === alignMode)?.help}
           />
         </ToolGroup>
-        <ToolGroup className="hdr-label">
-          <span className="hdr-text">Preset</span>
+        {view === 'panels' && (
+          <ToolGroup className="hdr-label">
+            <span className="hdr-text">Preset</span>
+            <MenuButton
+              label={
+                <span className="preset-name">
+                  {label} <Caret />
+                </span>
+              }
+              className="preset-btn"
+              testId="preset-menu"
+              align="right"
+              wide
+              title="Switch layouts, or save the current one as a preset"
+            >
+              {(close) => (
+                <>
+                  <MenuLabel>Built-in (find fields automatically)</MenuLabel>
+                  {PRESETS.map((p) => (
+                    <MenuItem
+                      key={p.id}
+                      label={p.name}
+                      description={p.description}
+                      checked={preset.active?.kind === 'builtin' && preset.active.id === p.id}
+                      onClick={() => (close(), void requestPreset({ kind: 'builtin', id: p.id }))}
+                      trailing={
+                        <button className="chip-btn" title="Apply, then save a copy you can edit" onClick={() => (close(), void duplicateBuiltin(p.id))}>
+                          <Icon name="copy" size={12} />
+                        </button>
+                      }
+                    />
+                  ))}
+                  <MenuLabel>My presets</MenuLabel>
+                  {preset.user.length === 0 && <div className="menu-empty">None yet. Arrange panels, then save the layout below.</div>}
+                  {preset.user.map((p) => (
+                    <MenuItem
+                      key={p.name}
+                      label={p.name}
+                      checked={activeUser === p.name}
+                      onClick={() => (close(), void requestPreset({ kind: 'user', id: p.name }))}
+                      trailing={
+                        <>
+                          <button className="chip-btn" title="Rename" onClick={() => (close(), void renamePreset(p.name))}>
+                            <Icon name="pencil" size={12} />
+                          </button>
+                          <button className="chip-btn" title="Duplicate" onClick={() => duplicatePreset(p.name)}>
+                            <Icon name="copy" size={12} />
+                          </button>
+                          <button className="chip-btn" title="Delete" onClick={() => (close(), void deletePreset(p.name))}>
+                            <Icon name="trash" size={12} />
+                          </button>
+                        </>
+                      }
+                    />
+                  ))}
+                  <MenuSeparator />
+                  {activeUser && (
+                    <MenuItem
+                      icon="refresh"
+                      label={`Update “${activeUser}”`}
+                      description="Overwrite it with the current layout"
+                      disabled={!preset.modified}
+                      onClick={() => (close(), updateActivePreset())}
+                    />
+                  )}
+                  <MenuItem
+                    icon="plus"
+                    label="Save current layout as preset…"
+                    disabled={!preset.hasPanels}
+                    hint={activeUser ? '' : keyHint('savePreset')}
+                    onClick={() => (close(), void savePresetAs())}
+                  />
+                  <MenuItem
+                    icon="download"
+                    label="Export presets…"
+                    description="Pick which ones go into a file to share"
+                    onClick={() => (close(), void exportPresets())}
+                  />
+                  <MenuItem icon="upload" label="Import presets…" onClick={() => (close(), void importPresets())} />
+                </>
+              )}
+            </MenuButton>
+          </ToolGroup>
+        )}
+        {view === 'panels' && (
           <MenuButton
             label={
-              <span className="preset-name">
-                {label} <Caret />
-              </span>
+              <>
+                <Icon name="plus" />
+                <span className="hdr-text">Add panel</span>
+              </>
             }
-            className="preset-btn"
-            testId="preset-menu"
+            testId="add-panel"
             align="right"
             wide
-            title="Switch layouts, or save the current one as a preset"
+            title="Add a panel to the grid"
           >
             {(close) => (
               <>
-                <MenuLabel>Built-in (find fields automatically)</MenuLabel>
-                {PRESETS.map((p) => (
+                <MenuLabel>Add a panel to the grid</MenuLabel>
+                {PANEL_CATALOG.map((p) => (
                   <MenuItem
-                    key={p.id}
-                    label={p.name}
+                    key={p.type}
+                    icon={p.icon}
+                    label={PANEL_TITLES[p.type]}
                     description={p.description}
-                    checked={preset.active?.kind === 'builtin' && preset.active.id === p.id}
-                    onClick={() => (close(), void requestPreset({ kind: 'builtin', id: p.id }))}
-                    trailing={
-                      <button className="chip-btn" title="Apply, then save a copy you can edit" onClick={() => (close(), void duplicateBuiltin(p.id))}>
-                        <Icon name="copy" size={12} />
-                      </button>
-                    }
+                    onClick={() => (close(), grid.addPanel(p.type))}
                   />
                 ))}
-                <MenuLabel>My presets</MenuLabel>
-                {preset.user.length === 0 && <div className="menu-empty">None yet. Arrange panels, then save the layout below.</div>}
-                {preset.user.map((p) => (
-                  <MenuItem
-                    key={p.name}
-                    label={p.name}
-                    checked={activeUser === p.name}
-                    onClick={() => (close(), void requestPreset({ kind: 'user', id: p.name }))}
-                    trailing={
-                      <>
-                        <button className="chip-btn" title="Rename" onClick={() => (close(), void renamePreset(p.name))}>
-                          <Icon name="pencil" size={12} />
-                        </button>
-                        <button className="chip-btn" title="Duplicate" onClick={() => duplicatePreset(p.name)}>
-                          <Icon name="copy" size={12} />
-                        </button>
-                        <button className="chip-btn" title="Delete" onClick={() => (close(), void deletePreset(p.name))}>
-                          <Icon name="trash" size={12} />
-                        </button>
-                      </>
-                    }
-                  />
-                ))}
-                <MenuSeparator />
-                {activeUser && (
-                  <MenuItem
-                    icon="refresh"
-                    label={`Update “${activeUser}”`}
-                    description="Overwrite it with the current layout"
-                    disabled={!preset.modified}
-                    onClick={() => (close(), updateActivePreset())}
-                  />
-                )}
-                <MenuItem
-                  icon="plus"
-                  label="Save current layout as preset…"
-                  disabled={!preset.hasPanels}
-                  hint={activeUser ? '' : keyHint('savePreset')}
-                  onClick={() => (close(), void savePresetAs())}
-                />
-                <MenuItem
-                  icon="download"
-                  label="Export presets…"
-                  description="Pick which ones go into a file to share"
-                  onClick={() => (close(), void exportPresets())}
-                />
-                <MenuItem icon="upload" label="Import presets…" onClick={() => (close(), void importPresets())} />
               </>
             )}
           </MenuButton>
-        </ToolGroup>
-        <MenuButton
-          label={
-            <>
-              <Icon name="plus" />
-              <span className="hdr-text">Add panel</span>
-            </>
-          }
-          testId="add-panel"
-          align="right"
-          wide
-          title="Add a panel to the grid"
-        >
-          {(close) => (
-            <>
-              <MenuLabel>Add a panel to the grid</MenuLabel>
-              {PANEL_CATALOG.map((p) => (
-                <MenuItem
-                  key={p.type}
-                  icon={p.icon}
-                  label={PANEL_TITLES[p.type]}
-                  description={p.description}
-                  onClick={() => (close(), grid.addPanel(p.type))}
-                />
-              ))}
-            </>
-          )}
-        </MenuButton>
-        <ToolButton
-          icon="power"
-          testId="power-btn"
-          text="Power"
-          onClick={() => runAction('power')}
-          title={`Power: what used the battery, by subsystem, and what caused each brownout (${keyHint('power')})`}
-        >
-          <span className="hdr-text">Power</span>
-        </ToolButton>
+        )}
         <ToolButton
           low
           icon="potato"
