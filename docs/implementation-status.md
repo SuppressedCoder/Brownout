@@ -35,6 +35,7 @@ What the app in this repository does today, mapped to the specs. ✓ built · �
 | Session restore: last session's logs, manual nudges and layout reopen on launch | ✓ | desktop only; setting to turn off; skipped when files are passed on the command line |
 | Multi-log session: colors, show/hide, primary log, close | ✓ | |
 | Header: sidebar toggle (left), File menu, log chips, Align, Preset menu, Add panel menu, Power button, Potato toggle, Settings, Help; one row, labels drop to icons and less-used controls move to an overflow menu when narrow | ✓ | |
+| Field search by type: typing the start of a type that exists in the open logs shows the rest faintly; Tab turns it into a type chip and typing goes on; several types list any of them, words narrow by name; Backspace on an empty search removes the last type, Escape clears; the sidebar's right edge drags to any width (remembered, double-click for the default) | ✓ | `typeLabels` / `completeType` / `typeMatches` in `lib/fields.ts` |
 | Field tree: search, type/unit badges, per-log dots, generated toggle, double-click, add-to-timeline; Ctrl / Shift multi-select, drag the selection or a whole folder (panels report what they skipped); favorites saved in the robot profile | ✓ | |
 | Inspector (values at cursor per log) | ✓ | |
 | Timeline: overview + window, mode lanes per log, Alt-drag to nudge, events, battery strip, user tracks (boolean/state/numeric), tags-seen track per camera, bookmarks, compact/standard/expanded, draggable height | ✓ | drag-to-reorder tracks ✗; findings track ✗ |
@@ -77,7 +78,7 @@ What the app in this repository does today, mapped to the specs. ✓ built · �
 | In-app dialogs and toasts (no `prompt()`), generated shortcut sheet | ✓ | |
 | CSV export (selection or visible range) | ✓ | SVG export ✗ |
 | Browser build (`npm run web`) | ✓ | |
-| UI test driving the real app (`npm run uitest`, 232 checks) | ✓ | passes on Linux (CI) and on Windows 11 |
+| UI test driving the real app (`npm run uitest`, 241 checks) | ✓ | passes on Linux (CI) and on Windows 11 |
 | Real-log check (`npm run reallog`): opens logs from `fixtures/local/`, sets up suggested subsystems, applies every preset, captures the camera view and the match report, writes a summary | ✓ | it checks nothing by itself; read `smoke/real-summary.json` and the screenshots |
 | Mechanism (side view), XY plot, 3D field | ✗ | |
 | Robot FTP download, DS folder watching, library | ✗ | P1 |
