@@ -1089,26 +1089,85 @@ async function main() {
   });
   const svt = () => page.evaluate(`document.querySelector('[data-testid=video-sync-video]').currentTime`) as Promise<number>;
   check('the sync view offers the log’s auto start', (await page.locator('[data-testid=video-sync-marker-auto]').count()) === 1);
+  await page.waitForSelector('[data-testid=video-sync-time][data-fps]');
+  {
+    const fps = await page.locator('[data-testid=video-sync-time]').getAttribute('data-fps');
+    check('it measures the video’s frame rate', fps === '30', String(fps));
+  }
   const cursorBeforeSync = await state<number | null>(page, 's.timeStore.get().cursor');
-  await page.locator('[data-testid=video-sync-scrub]').fill('3');
+  await page.locator('[data-testid=video-sync-goto]').fill('3');
+  await page.keyboard.press('Enter');
   await page.waitForTimeout(300);
   await page.locator('[data-testid=video-sync-pair]').focus();
   for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowRight');
   await page.waitForTimeout(400);
   check('arrow keys step the video one frame at a time', Math.abs((await svt()) - (3 + 3 / 30)) < 0.02, String(await svt()));
   check('...and leave the shared cursor alone', (await state<number | null>(page, 's.timeStore.get().cursor')) === cursorBeforeSync);
-  const drag = (await page.evaluate(
-    `(() => { const el = document.querySelector('[data-testid=video-sync-scrub]'); const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; const s = window.__brownout.seekStats; const r0 = s.requested, i0 = s.issued; for (let i = 0; i <= 60; i++) { set.call(el, String(4 + i * 0.1)); el.dispatchEvent(new Event('input', { bubbles: true })); } return { requested: s.requested - r0, issued: s.issued - i0 }; })()`,
+  const vtl = await page.locator('[data-testid=video-sync-timeline] canvas').boundingBox();
+  if (!vtl) throw new Error('no video timeline');
+  const dur = (await page.evaluate(`document.querySelector('[data-testid=video-sync-video]').duration`)) as number;
+  const vx = (t: number) => vtl.x + 8 + (t / dur) * (vtl.width - 16);
+  const seeks0 = (await page.evaluate(`({ ...window.__brownout.seekStats })`)) as { requested: number; issued: number };
+  await page.mouse.move(vx(4), vtl.y + 15);
+  await page.mouse.down();
+  await page.mouse.move(vx(10), vtl.y + 15, { steps: 60 });
+  await page.mouse.up();
+  await page.waitForTimeout(800);
+  const seeks1 = (await page.evaluate(`({ ...window.__brownout.seekStats })`)) as { requested: number; issued: number };
+  const drag = { requested: seeks1.requested - seeks0.requested, issued: seeks1.issued - seeks0.issued };
+  check('dragging the video timeline lands on the frame under the pointer', Math.abs((await svt()) - 10) < 0.06, JSON.stringify({ ...drag, at: await svt() }));
+  // a burst of seeks faster than the video can decode: one runs, the rest wait, and it ends on the last
+  const burst = (await page.evaluate(
+    `(() => { const s = window.__brownout; const v = document.querySelector('[data-testid=video-sync-video]'); const r0 = s.seekStats.requested, i0 = s.seekStats.issued; for (let i = 0; i <= 60; i++) s.chaseSeek(v, 4 + i * 0.1); return { requested: s.seekStats.requested - r0, issued: s.seekStats.issued - i0 }; })()`,
   )) as { requested: number; issued: number };
   await page.waitForTimeout(800);
   check(
-    'dragging the video runs one seek at a time and lands where the drag ended',
-    drag.issued < drag.requested / 4 && Math.abs((await svt()) - 10) < 0.05,
-    JSON.stringify({ ...drag, at: await svt() }),
+    'a burst of seeks runs one at a time and ends on the last',
+    burst.issued <= 2 && Math.abs((await svt()) - 10) < 0.01,
+    JSON.stringify({ ...burst, at: await svt() }),
   );
+  await page.locator('[data-testid=video-sync-goto]').fill('10.01');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(300);
   await page.locator('[data-testid=video-sync-pair]').click();
-  check('pairing says what was paired', (await page.locator('[data-testid=video-sync-status]').innerText()).includes('Paired: video 0:10.00'));
+  check('pairing says what was paired', /Paired: video 0:10\.0\d/.test(await page.locator('[data-testid=video-sync-status]').innerText()));
   await page.screenshot({ path: resolve(outDir, 'ui-video-sync.png') });
+  // zoom the video timeline in to single frames, then pick one by clicking it
+  await page.mouse.move(vx(10), vtl.y + 15);
+  for (let i = 0; i < 25; i++) await page.mouse.wheel(0, -200);
+  await page.waitForTimeout(200);
+  const vview = ((await page.locator('[data-testid=video-sync-timeline]').getAttribute('data-view')) ?? '').split(',').map(Number);
+  check('the wheel zooms the video timeline in to a few frames', vview.length === 2 && vview[1] - vview[0] <= 13 / 30 + 1e-6, vview.join(' to '));
+  await page.screenshot({ path: resolve(outDir, 'ui-video-sync-frames.png') });
+  {
+    const t = vview[0] + (vview[1] - vview[0]) * 0.75;
+    await page.mouse.click(vtl.x + 8 + 0.75 * (vtl.width - 16), vtl.y + 15);
+    await page.waitForTimeout(300);
+    check('clicking a frame shows that frame', Math.floor((await svt()) * 30 + 1e-6) === Math.floor(t * 30 + 1e-6), `${await svt()} for ${t}`);
+  }
+  // the log strip holds still while dragging, so the moment follows the pointer exactly
+  {
+    const ls = await page.locator('[data-testid=video-sync-strip] canvas').boundingBox();
+    if (!ls) throw new Error('no log strip');
+    const lview0 = (await page.locator('[data-testid=video-sync-strip]').getAttribute('data-view')) ?? '';
+    const [lo, hi] = lview0.split(',').map(Number);
+    await page.keyboard.down('Alt');
+    await page.mouse.move(ls.x + 8 + 0.3 * (ls.width - 16), ls.y + 50);
+    await page.mouse.down();
+    await page.mouse.move(ls.x + 8 + 0.7 * (ls.width - 16), ls.y + 50, { steps: 20 });
+    await page.mouse.up();
+    await page.keyboard.up('Alt');
+    const lview1 = (await page.locator('[data-testid=video-sync-strip]').getAttribute('data-view')) ?? '';
+    check('dragging on the log strip leaves its view where it was', lview0 === lview1 && lview0 !== '', `${lview0} then ${lview1}`);
+    // the pair button names the moment as "log <aligned time>"
+    const label = await page.locator('[data-testid=video-sync-pair]').innerText();
+    const shown = /log ([+-]?\d+:\d+(?:\.\d+)?)/.exec(label);
+    const offset = await state<number>(page, 's.sessionStore.get().logs[0].offset');
+    const want = lo + 0.7 * (hi - lo) + offset;
+    const m = shown ? /^([+-]?)(\d+):(\d+(?:\.\d+)?)$/.exec(shown[1]) : null;
+    const got = m ? (m[1] === '-' ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3])) : NaN;
+    check('...and the moment is where the pointer let go', Math.abs(got - want) < ((hi - lo) / ls.width) * 3 + 0.01, `${label}: ${got} vs ${want}`);
+  }
   check('no emoji in the sync view', (await pictographs(page)) === '', await pictographs(page));
   await page.locator('[data-testid=video-sync-cancel]').click();
   check(
@@ -1160,7 +1219,8 @@ async function main() {
   await page.waitForTimeout(500);
   check('the sync view starts from the saved sync', (await page.locator('[data-testid=video-sync-status]').innerText()).includes('Paired'));
   await page.locator('[data-testid=video-sync-marker-auto]').click();
-  await page.locator('[data-testid=video-sync-scrub]').fill('1');
+  await page.locator('[data-testid=video-sync-goto]').fill('1');
+  await page.keyboard.press('Enter');
   await page.waitForTimeout(300);
   await page.locator('[data-testid=video-sync-pair]').click();
   await page.keyboard.press('Enter');
@@ -1188,7 +1248,8 @@ async function main() {
     // auto start stays paired with 0:01; teleop start shows up 2% early, as from a clock running 2% slow
     const teleopVideo = 1 + 0.98 * (rs.teleop - rs.auto);
     await page.locator('[data-testid=video-sync-marker-teleop]').click();
-    await page.locator('[data-testid=video-sync-scrub]').fill(teleopVideo.toFixed(3));
+    await page.locator('[data-testid=video-sync-goto]').fill(teleopVideo.toFixed(3));
+    await page.keyboard.press('Enter');
     await page.waitForTimeout(300);
     await page.locator('[data-testid=video-sync-pair]').click();
     const twoStatus = await page.locator('[data-testid=video-sync-status]').innerText();

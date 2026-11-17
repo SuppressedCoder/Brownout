@@ -11,7 +11,7 @@ import { presetStore } from './state/presets';
 import { uiStore } from './state/ui';
 import { profileStore } from './state/profiles';
 import { videoStore } from './state/videos';
-import { seekStats } from './lib/videoSeek';
+import { seekStats, chaseSeek } from './lib/videoSeek';
 
 // Handle for the UI test script and for poking at state from DevTools.
 (window as unknown as { __brownout: unknown }).__brownout = {
@@ -27,6 +27,7 @@ import { seekStats } from './lib/videoSeek';
   timeBounds,
   /** Video seeks asked for and actually issued (lib/videoSeek.ts). */
   seekStats,
+  chaseSeek,
 };
 
 createRoot(document.getElementById('root')!).render(
