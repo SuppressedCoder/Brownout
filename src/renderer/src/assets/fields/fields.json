@@ -1,0 +1,73 @@
+{
+ "2024": {
+  "game": "Crescendo",
+  "image": "2024.webp",
+  "imageSize": [
+   2400,
+   1200
+  ],
+  "topLeft": [
+   115.68,
+   60.93
+  ],
+  "bottomRight": [
+   2283.55,
+   1138.3
+  ],
+  "fieldSize": [
+   16.5417,
+   8.2105
+  ],
+  "tagLayouts": {
+   "default": "tags-2024-default.json"
+  }
+ },
+ "2025": {
+  "game": "Reefscape",
+  "image": "2025.webp",
+  "imageSize": [
+   2400,
+   1156
+  ],
+  "topLeft": [
+   320.4,
+   174.6
+  ],
+  "bottomRight": [
+   2079.6,
+   982.8
+  ],
+  "fieldSize": [
+   17.5483,
+   8.0519
+  ],
+  "tagLayouts": {
+   "welded": "tags-2025-welded.json",
+   "andymark": "tags-2025-andymark.json"
+  }
+ },
+ "2026": {
+  "game": "Rebuilt",
+  "image": "2026.webp",
+  "imageSize": [
+   2400,
+   1164
+  ],
+  "topLeft": [
+   140.13,
+   67.49
+  ],
+  "bottomRight": [
+   2254.72,
+   1094.76
+  ],
+  "fieldSize": [
+   16.5412,
+   8.0693
+  ],
+  "tagLayouts": {
+   "welded": "tags-2026-welded.json",
+   "andymark": "tags-2026-andymark.json"
+  }
+ }
+}

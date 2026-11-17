@@ -1,0 +1,413 @@
+/**
+ * Sidebar: favorites, the field tree (search, type/unit badges, per-log
+ * dots) and the inspector that shows selected fields' values at the cursor.
+ *
+ * Selecting works like a file list: click selects one field, Ctrl-click adds
+ * or removes one, Shift-click selects a range. Dragging a selected field
+ * drags the whole selection; dragging a folder takes every field inside it.
+ * Double-click adds a field to the active panel.
+ */
+import { useMemo, useRef, useState } from 'react';
+import { sessionStore, toggleSelectedKey, setSelectedKeys, addTimelineTrack, activeProfileId } from '../state/session';
+import { timeStore } from '../state/time';
+import { useStore } from '../state/store';
+import { panelStore, addFieldToPanel, addFieldsToPanel, panelAccepts, panelTypeForField, PANEL_TITLES } from '../state/panels';
+import { profileStore, profileById, updateProfile } from '../state/profiles';
+import { grid } from './Grid';
+import { useFieldIndex, keyMatchesSearch, shortKey, type MergedField } from '../lib/fields';
+import { setFieldDrag, type FieldDrag } from '../lib/dnd';
+import { client } from '../worker/client';
+import { useSeriesTick } from '../lib/useSeries';
+import { indexAtOrBefore } from '@core/log';
+import { formatValue } from '../lib/format';
+import { toast } from '../state/ui';
+import { Icon } from './Icon';
+
+interface Node {
+  name: string;
+  path: string;
+  children: Map<string, Node>;
+  field?: MergedField;
+  count: number;
+}
+
+const MAX_DRAG = 100;
+const INSPECTOR_MAX = 8;
+
+function buildTree(fields: Map<string, MergedField>): Node {
+  const root: Node = { name: '', path: '', children: new Map(), count: 0 };
+  for (const f of fields.values()) {
+    const parts = f.key.split('/').filter(Boolean);
+    let cur = root;
+    let path = '';
+    for (let i = 0; i < parts.length; i++) {
+      path += (path ? '/' : '') + parts[i];
+      let next = cur.children.get(parts[i]);
+      if (!next) {
+        next = { name: parts[i], path, children: new Map(), count: 0 };
+        cur.children.set(parts[i], next);
+      }
+      cur = next;
+      cur.count++;
+    }
+    cur.field = f;
+  }
+  return root;
+}
+
+function sortedChildren(n: Node): Node[] {
+  return [...n.children.values()].sort((a, b) => {
+    const ad = a.children.size > 0 ? 0 : 1;
+    const bd = b.children.size > 0 ? 0 : 1;
+    if (ad !== bd) return ad - bd;
+    const na = Number(a.name);
+    const nb = Number(b.name);
+    if (!Number.isNaN(na) && !Number.isNaN(nb)) return na - nb;
+    return a.name.localeCompare(b.name);
+  });
+}
+
+/** The fields a folder stands for when dragged: every logged field under it (struct and array parents, not their generated children). */
+function fieldsUnder(n: Node): MergedField[] {
+  const real: MergedField[] = [];
+  const generated: MergedField[] = [];
+  const walk = (x: Node) => {
+    if (x.field) (x.field.generated ? generated : real).push(x.field);
+    for (const c of sortedChildren(x)) walk(c);
+  };
+  walk(n);
+  return real.length ? real : generated;
+}
+
+const asDrag = (f: MergedField): FieldDrag => ({ key: f.key, kind: f.kind, structName: f.structName });
+
+/** Tell the user what a multi-field add did. */
+export function reportAdd(total: number, added: number, skipped: { key: string }[], panelTitle: string): void {
+  if (total <= 1 && !skipped.length) return;
+  if (!skipped.length) {
+    toast(`Added ${added} fields to ${panelTitle}.`);
+    return;
+  }
+  const names = skipped
+    .slice(0, 3)
+    .map((s) => shortKey(s.key))
+    .join(', ');
+  const more = skipped.length > 3 ? ` and ${skipped.length - 3} more` : '';
+  toast(`Added ${added} of ${total} to ${panelTitle}. Skipped ${skipped.length} it can't show: ${names}${more}.`, added ? 'info' : 'error', undefined, 7000);
+}
+
+/** Add fields to the active panel when it accepts the first one, else open the best panel type for them. */
+export function smartAddMany(fields: MergedField[], forceNew = false): void {
+  if (!fields.length) return;
+  let rest = fields.map(asDrag);
+  const active = grid.activePanelId();
+  const ps = active ? panelStore.get().panels[active] : undefined;
+  if (!forceNew && active && ps && panelAccepts(ps.type, rest[0].kind, rest[0].structName)) {
+    const r = addFieldsToPanel(active, rest);
+    reportAdd(rest.length, r.added, r.skipped, PANEL_TITLES[ps.type]);
+    return;
+  }
+  // one new panel per kind of field, so nothing is dropped
+  const total = rest.length;
+  let panels = 0;
+  while (rest.length && panels < 4) {
+    const type = panelTypeForField(rest[0].kind, rest[0].structName, rest[0].key);
+    const id = grid.addPanel(type);
+    const r = addFieldsToPanel(id, rest);
+    if (!r.added) {
+      addFieldToPanel(id, rest[0].key, rest[0].kind, rest[0].structName);
+      break;
+    }
+    rest = r.skipped;
+    panels++;
+  }
+  if (total > 1) toast(`Opened ${total - rest.length} fields in ${panels} new panel${panels === 1 ? '' : 's'}.`);
+}
+
+export function smartAdd(f: MergedField, forceNew = false): void {
+  smartAddMany([f], forceNew);
+}
+
+export function toggleFavorite(key: string): void {
+  updateProfile(activeProfileId(), (p) => ({ favorites: p.favorites.includes(key) ? p.favorites.filter((k) => k !== key) : [...p.favorites, key] }));
+}
+
+export function Sidebar() {
+  const fields = useFieldIndex();
+  const logs = useStore(sessionStore, (s) => s.logs);
+  const selected = useStore(sessionStore, (s) => s.selectedKeys);
+  const profileId = useStore(sessionStore, (s) => s.logs[0]?.profileId);
+  const profiles = useStore(profileStore, (s) => s.profiles);
+  const favorites = (profiles.find((p) => p.id === profileId) ?? profileById(profileId)).favorites;
+  const [q, setQ] = useState('');
+  const [open, setOpen] = useState<Set<string>>(() => new Set());
+  const [favOpen, setFavOpen] = useState(true);
+  const [showGenerated, setShowGenerated] = useState(true);
+  const tree = useMemo(() => buildTree(fields), [fields]);
+  const anchor = useRef<string | null>(null);
+  /** Field keys in the order they are on screen, for Shift-click ranges. */
+  const order = useRef<string[]>([]);
+  order.current = [];
+
+  const toggle = (path: string) =>
+    setOpen((s) => {
+      const n = new Set(s);
+      if (n.has(path)) n.delete(path);
+      else n.add(path);
+      return n;
+    });
+
+  const flat = useMemo(() => {
+    if (!q) return null;
+    const out: MergedField[] = [];
+    for (const f of fields.values()) {
+      if (!showGenerated && f.generated) continue;
+      if (keyMatchesSearch(f.key, q)) out.push(f);
+      if (out.length > 500) break;
+    }
+    return out;
+  }, [q, fields, showGenerated]);
+
+  const onRowClick = (e: React.MouseEvent, key: string) => {
+    if (e.shiftKey && anchor.current && order.current.includes(anchor.current)) {
+      const a = order.current.indexOf(anchor.current);
+      const b = order.current.indexOf(key);
+      const range = order.current.slice(Math.min(a, b), Math.max(a, b) + 1);
+      setSelectedKeys(e.ctrlKey || e.metaKey ? [...new Set([...selected, ...range])] : range);
+      return;
+    }
+    anchor.current = key;
+    toggleSelectedKey(key, !e.ctrlKey && !e.metaKey);
+  };
+
+  const onRowDrag = (e: React.DragEvent, f: MergedField) => {
+    // dragging a selected row takes the whole selection, in on-screen order
+    if (selected.length > 1 && selected.includes(f.key)) {
+      const keys = order.current.filter((k) => selected.includes(k));
+      for (const k of selected) if (!keys.includes(k)) keys.push(k);
+      const items = keys.map((k) => fields.get(k)).filter((x): x is MergedField => !!x);
+      setFieldDrag(e, items.slice(0, MAX_DRAG).map(asDrag));
+    } else setFieldDrag(e, [asDrag(f)]);
+  };
+
+  const onFolderDrag = (e: React.DragEvent, n: Node) => {
+    const all = fieldsUnder(n).filter((f) => showGenerated || !f.generated);
+    if (!all.length) {
+      e.preventDefault();
+      return;
+    }
+    if (all.length > MAX_DRAG) toast(`“${n.name}” holds ${all.length} fields; dragging the first ${MAX_DRAG}.`);
+    setFieldDrag(e, all.slice(0, MAX_DRAG).map(asDrag));
+  };
+
+  const row = (f: MergedField, name: string, depth: number, keyPrefix = '') => {
+    order.current.push(f.key);
+    return (
+      <FieldRow
+        key={keyPrefix + f.key}
+        f={f}
+        name={name}
+        depth={depth}
+        logs={logs}
+        selected={selected.includes(f.key)}
+        favorite={favorites.includes(f.key)}
+        onClick={onRowClick}
+        onDrag={onRowDrag}
+        addSelection={() =>
+          smartAddMany(selected.length > 1 && selected.includes(f.key) ? (selected.map((k) => fields.get(k)).filter(Boolean) as MergedField[]) : [f])
+        }
+      />
+    );
+  };
+
+  const renderNode = (n: Node, depth: number): React.ReactNode => {
+    const kids = sortedChildren(n);
+    return kids.map((c) => {
+      if (c.field && c.children.size === 0) {
+        if (!showGenerated && c.field.generated) return null;
+        return row(c.field, c.name, depth);
+      }
+      const isOpen = open.has(c.path);
+      return (
+        <div key={c.path}>
+          <div
+            className="tree-row folder"
+            style={{ paddingLeft: 6 + depth * 12 }}
+            onClick={() => toggle(c.path)}
+            draggable
+            onDragStart={(e) => onFolderDrag(e, c)}
+            title={`${c.count} fields · drag onto a panel to add them all`}
+          >
+            <span className="caret">
+              <Icon name={isOpen ? 'chevronDown' : 'chevronRight'} size={10} />
+            </span>
+            <span className="name">{c.name}</span>
+            <span className="count">{c.count}</span>
+            {c.field && <span className="kind-badge">{c.field.structName ?? c.field.kind}</span>}
+          </div>
+          {c.field && isOpen && row(c.field, `(${c.field.structName ?? c.field.kind})`, depth + 1)}
+          {isOpen && renderNode(c, depth + 1)}
+        </div>
+      );
+    });
+  };
+
+  const favFields = favorites.map((k) => fields.get(k)).filter((f): f is MergedField => !!f);
+  const favMissing = favorites.length - favFields.length;
+
+  return (
+    <div className="sidebar">
+      <div className="sidebar-head">
+        <input className="search" placeholder="Search fields…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <button className={`tool-btn${showGenerated ? ' active' : ''}`} title="Show struct / array children" onClick={() => setShowGenerated(!showGenerated)}>
+          {'{}'}
+        </button>
+      </div>
+      <div className="tree scroll" data-testid="field-tree">
+        {logs.length === 0 && <div className="hint">No logs open.</div>}
+        {!flat && favorites.length > 0 && logs.length > 0 && (
+          <div className="fav-section">
+            <div className="tree-row folder" onClick={() => setFavOpen(!favOpen)} title="Starred fields, saved in the robot profile">
+              <span className="caret">
+                <Icon name={favOpen ? 'chevronDown' : 'chevronRight'} size={10} />
+              </span>
+              <Icon name="starFilled" size={11} className="fav-star" />
+              <span className="name">Favorites</span>
+              <span className="count">{favFields.length}</span>
+            </div>
+            {favOpen && favFields.map((f) => row(f, shortKey(f.key, 3), 1, 'fav:'))}
+            {favOpen && favMissing > 0 && (
+              <div className="hint fav-missing">
+                {favMissing} favorite{favMissing === 1 ? ' is' : 's are'} not in the open logs.
+              </div>
+            )}
+          </div>
+        )}
+        {flat ? flat.map((f) => row(f, f.key, 0)) : renderNode(tree, 0)}
+        {flat && flat.length === 0 && <div className="hint">No matches.</div>}
+      </div>
+      {selected.length > 1 && (
+        <div className="selection-bar">
+          <span>{selected.length} selected</span>
+          <button
+            className="link-btn"
+            onClick={() => smartAddMany(selected.map((k) => fields.get(k)).filter(Boolean) as MergedField[])}
+            title="Add them to the active panel (or open a new one)"
+          >
+            Add to panel
+          </button>
+          <button className="link-btn" onClick={() => setSelectedKeys([])}>
+            Clear
+          </button>
+        </div>
+      )}
+      <Inspector />
+    </div>
+  );
+}
+
+function FieldRow({
+  f,
+  name,
+  depth,
+  logs,
+  selected,
+  favorite,
+  onClick,
+  onDrag,
+  addSelection,
+}: {
+  f: MergedField;
+  name: string;
+  depth: number;
+  logs: { id: string; color: string; name: string }[];
+  selected: boolean;
+  favorite: boolean;
+  onClick: (e: React.MouseEvent, key: string) => void;
+  onDrag: (e: React.DragEvent, f: MergedField) => void;
+  addSelection: () => void;
+}) {
+  return (
+    <div
+      className={`tree-row field${selected ? ' selected' : ''}${f.generated ? ' generated' : ''}`}
+      style={{ paddingLeft: 6 + depth * 12 }}
+      draggable
+      data-key={f.key}
+      onDragStart={(e) => onDrag(e, f)}
+      onClick={(e) => onClick(e, f.key)}
+      onDoubleClick={addSelection}
+      title={`${f.key}\n${f.type}${f.unit ? ` · ${f.unit}` : ''} · ${f.count} samples\nDrag onto a panel · double-click to add to the active panel\nCtrl-click and Shift-click select several`}
+    >
+      <span className="name">{name}</span>
+      {f.unit && <span className="unit">{f.unit}</span>}
+      <span className="kind-badge">{f.structName ?? f.kind}</span>
+      {logs.length > 1 && (
+        <span className="log-dots">
+          {logs.map((l) => (
+            <span key={l.id} className="dot" style={{ background: f.logIds.includes(l.id) ? l.color : 'transparent', borderColor: l.color }} />
+          ))}
+        </span>
+      )}
+      <span className={`row-actions${favorite ? ' has-fav' : ''}`}>
+        <button
+          className={`chip-btn fav-btn${favorite ? ' on' : ''}`}
+          title={favorite ? 'Remove from favorites' : 'Add to favorites (kept at the top, saved in the robot profile)'}
+          onClick={(e) => (e.stopPropagation(), toggleFavorite(f.key))}
+        >
+          <Icon name={favorite ? 'starFilled' : 'star'} size={12} />
+        </button>
+        <button className="chip-btn hover-only" title="Open in a new panel" onClick={(e) => (e.stopPropagation(), smartAdd(f, true))}>
+          <Icon name="plus" size={12} />
+        </button>
+        {(f.kind === 'boolean' || f.kind === 'string' || f.kind === 'number') && (
+          <button className="chip-btn hover-only" title="Add as a timeline track" onClick={(e) => (e.stopPropagation(), addTimelineTrack(f.key))}>
+            <Icon name="track" size={12} />
+          </button>
+        )}
+      </span>
+    </div>
+  );
+}
+
+function Inspector() {
+  const selected = useStore(sessionStore, (s) => s.selectedKeys);
+  const logs = useStore(sessionStore, (s) => s.logs.filter((l) => l.visible));
+  const t = useStore(timeStore, (s) => s.hover ?? s.cursor);
+  const fields = useFieldIndex();
+  useSeriesTick();
+  if (!selected.length) return <div className="inspector hint">Select a field to inspect its value at the cursor.</div>;
+  return (
+    <div className="inspector">
+      {selected.slice(0, INSPECTOR_MAX).map((key) => {
+        const f = fields.get(key);
+        return (
+          <div key={key} className="insp-field">
+            <div className="insp-key" title={key}>
+              {key}
+              <button className="chip-btn" onClick={() => toggleSelectedKey(key)} title="Deselect">
+                <Icon name="close" size={10} />
+              </button>
+            </div>
+            {logs.map((l) => {
+              const s = client.peekSeries(l.id, key);
+              let text = '…';
+              if (s === null) text = 'not in this log';
+              else if (s && t !== null) {
+                const i = indexAtOrBefore(s.t, t - l.offset);
+                const v = i < 0 ? undefined : s.kind === 'boolean' ? !!s.v[i] : s.v[i];
+                text = v === undefined ? '— (before first sample)' : formatValue(v, f?.unit);
+              } else if (s && t === null) text = 'set the cursor';
+              return (
+                <div key={l.id} className="insp-val">
+                  <span className="dot" style={{ background: l.color }} />
+                  <span className="mono">{text}</span>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+      {selected.length > INSPECTOR_MAX && <div className="hint">{selected.length - INSPECTOR_MAX} more selected fields are not shown here.</div>}
+    </div>
+  );
+}
