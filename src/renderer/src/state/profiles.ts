@@ -55,7 +55,12 @@ export interface Layer {
   link?: { key: string; unit: 'rad' | 'deg' | 'rot'; offset: number; invert: boolean } | null;
   /** Rotation center for a linked part, in the robot frame (m). */
   pivot: { x: number; y: number };
+  /** The part this one is attached to: it moves with that part's turn, and its own adds on top. Missing: attached to the robot. */
+  parent?: string | null;
 }
+
+/** Part positions and sizes may be up to this far out (m): generous, so a big robot or a long arm fits. */
+export const PART_LIMIT = 20;
 
 export const CAMERA_COLORS = ['#2ec4b6', '#c77dff', '#edc948', '#ff9da7', '#9be564', '#ff8c42'];
 
@@ -162,10 +167,10 @@ export function normalizeProfile(raw: unknown): RobotProfile | null {
           id: str(l.id) ?? newId('layer'),
           name: str(l.name) ?? `Part ${i + 1}`,
           kind: l.kind === 'ellipse' || l.kind === 'image' ? l.kind : 'rect',
-          x: num(l.x, 0, -3, 3),
-          y: num(l.y, 0, -3, 3),
-          length: num(l.length, 0.3, 0.01, 4),
-          width: num(l.width, 0.3, 0.01, 4),
+          x: num(l.x, 0, -PART_LIMIT, PART_LIMIT),
+          y: num(l.y, 0, -PART_LIMIT, PART_LIMIT),
+          length: num(l.length, 0.3, 0.01, PART_LIMIT),
+          width: num(l.width, 0.3, 0.01, PART_LIMIT),
           rotation: num(l.rotation, 0, -3600, 3600),
           opacity: num(l.opacity, 1, 0.05, 1),
           color: str(l.color) ?? '#f2c94c',
@@ -180,10 +185,25 @@ export function normalizeProfile(raw: unknown): RobotProfile | null {
                   invert: !!l.link.invert,
                 }
               : null,
-          pivot: { x: num(l.pivot?.x, 0, -3, 3), y: num(l.pivot?.y, 0, -3, 3) },
+          pivot: { x: num(l.pivot?.x, 0, -PART_LIMIT, PART_LIMIT), y: num(l.pivot?.y, 0, -PART_LIMIT, PART_LIMIT) },
+          parent: str(l.parent) ?? null,
         }))
         .filter((l) => l.kind !== 'image' || !!l.src)
     : [];
+  // a part may only hang from a part that exists, and never (through others) from itself
+  for (const l of layers) {
+    const seen = new Set<string>([l.id]);
+    let p = l.parent ? layers.find((x) => x.id === l.parent) : undefined;
+    if (l.parent && !p) l.parent = null;
+    while (p) {
+      if (seen.has(p.id)) {
+        l.parent = null;
+        break;
+      }
+      seen.add(p.id);
+      p = p.parent ? layers.find((x) => x.id === p!.parent) : undefined;
+    }
+  }
   return {
     id: typeof p.id === 'string' ? p.id : base.id,
     name: base.name,
@@ -195,8 +215,8 @@ export function normalizeProfile(raw: unknown): RobotProfile | null {
       maxSpeed: typeof p.swerve?.maxSpeed === 'number' && p.swerve.maxSpeed > 0 ? p.swerve.maxSpeed : null,
     },
     robot: {
-      length: typeof p.robot?.length === 'number' && p.robot.length > 0.2 && p.robot.length < 3 ? p.robot.length : base.robot.length,
-      width: typeof p.robot?.width === 'number' && p.robot.width > 0.2 && p.robot.width < 3 ? p.robot.width : base.robot.width,
+      length: typeof p.robot?.length === 'number' && Number.isFinite(p.robot.length) && p.robot.length > 0.01 ? p.robot.length : base.robot.length,
+      width: typeof p.robot?.width === 'number' && Number.isFinite(p.robot.width) && p.robot.width > 0.01 ? p.robot.width : base.robot.width,
     },
     cameras,
     layers,

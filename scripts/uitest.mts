@@ -1135,7 +1135,79 @@ async function main() {
   // the big picture would cover everything on the field: remove it again
   await page.locator('[data-testid=robot-layers] .robot-layer').first().locator('.chip-btn').last().click();
   check('a part can be deleted', (await state<number>(page, 's.profileStore.get().profiles[0].layers.length')) === 2);
+  {
+    type L = {
+      id: string;
+      name: string;
+      x: number;
+      y: number;
+      length: number;
+      width: number;
+      rotation: number;
+      pivot: { x: number; y: number };
+      parent?: string | null;
+    };
+    const parts = () => state<L[]>(page, 's.profileStore.get().profiles[0].layers');
+    const [rect] = await parts();
+    // where it turns: its back end
+    await page.locator(`[data-testid=robot-layers] .robot-layer[data-layer="${rect.name}"]`).click();
+    await page.locator('[data-testid=layer-anchor]').selectOption('back');
+    const r1 = (await parts())[0];
+    const ra = (r1.rotation * Math.PI) / 180;
+    check(
+      'a part can turn around its back end',
+      Math.abs(r1.pivot.x - (r1.x - (r1.length / 2) * Math.cos(ra))) < 1e-6 && Math.abs(r1.pivot.y - (r1.y - (r1.length / 2) * Math.sin(ra))) < 1e-6,
+      JSON.stringify(r1),
+    );
+    // drag the pivot marker: the pivot moves, the part stays
+    const pb = await page.locator('[data-testid=robot-preview]').boundingBox();
+    if (pb) {
+      const ls = await parts();
+      const span = Math.max(0.9, 0.9, ...ls.map((l) => 2 * Math.max(Math.abs(l.x) + l.length / 2, Math.abs(l.y) + l.width / 2))) * 1.25;
+      const sc = Math.max(20, Math.min(pb.width, pb.height - 24) / Math.max(span, 0.5));
+      const px = pb.x + pb.width / 2 - r1.pivot.y * sc;
+      const py = pb.y + pb.height / 2 + 6 - r1.pivot.x * sc;
+      await page.mouse.move(px, py);
+      await page.mouse.down();
+      await page.mouse.move(px + 20, py, { steps: 4 });
+      await page.mouse.up();
+      const r2 = (await parts())[0];
+      check(
+        'dragging the pivot marker moves the pivot, not the part',
+        r2.x === r1.x && r2.y === r1.y && r2.pivot.y < r1.pivot.y - 0.02 && Math.abs(r2.pivot.x - r1.pivot.x) < 0.01,
+        JSON.stringify({ before: r1.pivot, after: r2.pivot }),
+      );
+      check('...and the turn point then reads as one you set', (await page.locator('[data-testid=layer-anchor]').inputValue()) === 'custom');
+    }
+    // attach the picture to the turning rectangle
+    const pic = (await parts())[1];
+    await page.locator(`[data-testid=robot-layers] .robot-layer[data-layer="${pic.name}"]`).click();
+    await page.locator('[data-testid=layer-parent]').selectOption(rect.id);
+    check('a part can be attached to another part', (await parts())[1].parent === rect.id);
+    const rectOptions = await page.locator(`[data-testid=robot-layers] .robot-layer[data-layer="${rect.name}"]`).count();
+    await page.locator(`[data-testid=robot-layers] .robot-layer[data-layer="${rect.name}"]`).click();
+    const choices = await page.locator('[data-testid=layer-parent] option').allInnerTexts();
+    check('...and a part cannot be attached to one that hangs from it', rectOptions === 1 && !choices.some((c) => c.startsWith(pic.name)), choices.join(' | '));
+    const pclip = pb ? { x: pb.x, y: pb.y, width: pb.width, height: pb.height } : undefined;
+    if (pclip) {
+      await page.locator('[data-testid=robot-test-angle]').fill('90');
+      await page.waitForTimeout(250);
+      await page.screenshot({ path: resolve(outDir, 'ui-robot-attached.png'), clip: pclip });
+      await page.locator('[data-testid=robot-test-angle]').fill('0');
+    }
+  }
   await page.locator('[data-testid=robot-done]').click();
+  // the robot's size is not capped
+  {
+    const len = page.locator('input[title="Length, front to back (m)"]');
+    await len.fill('3.6');
+    await len.blur();
+    await page.waitForTimeout(150);
+    check('a robot can be longer than 3 m', (await state<number>(page, 's.profileStore.get().profiles[0].robot.length')) === 3.6);
+    await len.fill('0.9');
+    await len.blur();
+    await page.waitForTimeout(150);
+  }
   await page.keyboard.press('Escape');
   await page.locator('.dv-default-tab', { hasText: '2D field' }).click();
   await page.evaluate(`window.__brownout.timeStore.set({ cursor: 44 })`);
@@ -1156,6 +1228,31 @@ async function main() {
     );
     await page.waitForTimeout(300);
     check('the robot’s parts are drawn on the 2D field', !withParts.equals(noParts));
+    // the Display menu hides all parts, one part, or the robot names
+    const fieldSettings = () =>
+      state<{ showParts?: boolean; hiddenParts?: string[]; showLabels?: boolean }>(
+        page,
+        `Object.entries(s.panelStore.get().panels).find(([id, p]) => p.type === 'field' && !id.startsWith('view:'))[1]`,
+      );
+    await page.locator('.field-panel [data-testid=field-display]').first().click();
+    await page.locator('.menu [data-testid=field-show-parts]').click();
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(250);
+    await page.mouse.move(5, 5);
+    const hiddenAll = await page.screenshot({ clip });
+    check(
+      'the Display menu can hide the robot’s parts',
+      (await fieldSettings()).showParts === false && !hiddenAll.equals(withParts) && hiddenAll.equals(noParts),
+    );
+    await page.locator('.field-panel [data-testid=field-display]').first().click();
+    await page.locator('.menu [data-testid=field-show-parts]').click();
+    await page.locator('.menu [data-testid=field-part]').first().click();
+    check('...or one part at a time', (await fieldSettings()).showParts !== false && (await fieldSettings()).hiddenParts?.length === 1);
+    await page.locator('.menu [data-testid=field-part]').first().click();
+    await page.locator('.menu .menu-item', { hasText: 'Robot names' }).click();
+    check('...and the robot names', (await fieldSettings()).showLabels === false && (await fieldSettings()).hiddenParts?.length === 0);
+    await page.locator('.menu .menu-item', { hasText: 'Robot names' }).click();
+    await page.keyboard.press('Escape');
   }
   await page.screenshot({ path: resolve(outDir, 'ui-robot-on-field.png') });
 

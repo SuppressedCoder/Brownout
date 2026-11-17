@@ -58,6 +58,12 @@ export interface FieldSettings {
   showCameras?: boolean;
   /** Draw the season's field picture (default on). */
   showImage?: boolean;
+  /** Draw the robot's parts from its profile (default on). */
+  showParts?: boolean;
+  /** Parts (layer ids) not to draw. */
+  hiddenParts?: string[];
+  /** Write each log's name by its robot (default on). */
+  showLabels?: boolean;
   /** 0.15 .. 1: how strongly the field picture shows. */
   imageBrightness?: number;
   /** 1 = whole field fits the panel. */
