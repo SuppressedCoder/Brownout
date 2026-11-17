@@ -1,11 +1,14 @@
 # Builds the installers on Windows, macOS and Linux.
 #
-# - Push a version tag (git tag v0.5.1 && git push origin v0.5.1): builds everything and
-#   creates a draft GitHub release with the installers attached. Review it and click Publish.
-#   The tag must match "version" in package.json.
-# - A pull request that changes the packaging setup builds the installers too (no release),
-#   so a broken build shows up before the next tag.
-# - "Run workflow" on the Actions tab does the same by hand.
+# Two ways to release (the version comes from "version" in package.json):
+# - From the website or a phone: Actions tab, "Release", "Run workflow" on main, tick
+#   "Make a draft release". The workflow tags the commit v<version> and creates a draft
+#   release with the installers attached. Review it and click Publish.
+# - From a terminal: push a version tag (git tag v0.5.1 && git push origin v0.5.1). The tag
+#   must match package.json. If a release for that tag already exists (for example one made
+#   on the website), the installers are added to it; otherwise a draft is created.
+# "Run workflow" without the box ticked, and any pull request that changes the packaging
+# setup, only build the installers, so a broken build shows up before a release.
 name: Release
 
 on:
@@ -19,6 +22,11 @@ on:
       - 'package-lock.json'
       - 'build/**'
   workflow_dispatch:
+    inputs:
+      release:
+        description: Make a draft release (tags this commit v<version from package.json>)
+        type: boolean
+        default: false
 
 jobs:
   build:
@@ -67,11 +75,16 @@ jobs:
 
   release:
     needs: build
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.release)
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: package.json
+          sparse-checkout-cone-mode: false
+
       - uses: actions/download-artifact@v4
         with:
           path: installers
@@ -82,7 +95,28 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          version="$(node -p "require('./package.json').version")"
+          tag="v${version}"
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            if [ "$GITHUB_REF" != "refs/heads/${{ github.event.repository.default_branch }}" ]; then
+              echo "::error::Run the release from the ${{ github.event.repository.default_branch }} branch."
+              exit 1
+            fi
+            # Tag this commit. (A tag made with the workflow's own token does not start this workflow again.)
+            if gh api "repos/$GH_REPO/git/ref/tags/$tag" > /dev/null 2>&1; then
+              echo "::error::Tag $tag already exists. Bump the version in package.json for a new release."
+              exit 1
+            fi
+            gh api "repos/$GH_REPO/git/refs" --method POST -f ref="refs/tags/$tag" -f sha="$GITHUB_SHA" > /dev/null
+          fi
+
+          # A release for this tag already exists (made on the website): add the installers to it
+          if gh release view "$tag" > /dev/null 2>&1; then
+            gh release upload "$tag" installers/* --clobber
+            echo "Added the installers to the existing release $tag."
+            exit 0
+          fi
+
           cat > notes.md <<EOF
           ## Download
 
@@ -101,8 +135,8 @@ jobs:
 
           EOF
           prerelease=""
-          case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease" ;; esac
-          gh release create "$GITHUB_REF_NAME" installers/* \
+          case "$tag" in *-*) prerelease="--prerelease" ;; esac
+          gh release create "$tag" installers/* \
             --draft $prerelease \
             --title "Brownout ${version}" \
             --notes-file notes.md \
