@@ -2119,9 +2119,18 @@ h4 {
   white-space: nowrap;
   font-size: 12px;
 }
-.vsync-scrub {
-  width: calc(100% - 20px);
-  margin: 2px 10px 6px;
+.vsync-vtimeline {
+  height: 58px;
+  margin: 2px 0 6px;
+  cursor: crosshair;
+}
+.vsync-vtimeline canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.vsync-goto .tool-input {
+  width: 96px;
 }
 .vsync-log {
   border-top: 1px solid var(--line);
@@ -2140,7 +2149,7 @@ h4 {
   padding: 0;
 }
 .vsync-strip {
-  height: 96px;
+  height: 110px;
   cursor: crosshair;
 }
 .vsync-strip canvas {
