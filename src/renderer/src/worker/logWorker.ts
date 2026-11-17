@@ -6,7 +6,7 @@
 import { LogData, type FieldInfo, type Series } from '@core/log';
 import { computeRobotState, computeMatchInfo, detectEra } from '@core/robotState';
 import { checkLoggingHealth, readMetadata, detectLogger } from '@core/analyzers/health';
-import { extractConsole, extractEvents } from '@core/analyzers/events';
+import { extractConsole, extractEvents, type PointEvent } from '@core/analyzers/events';
 import { analyzePower, DEFAULT_THRESHOLDS, type PowerReport } from '@core/analyzers/power';
 import { computeSubsystems, UNASSIGNED } from '@core/analyzers/subsystems';
 import { analyzePaths } from '@core/analyzers/paths';
@@ -14,6 +14,8 @@ import { resolveRole, resolveRoleCandidates, type Role } from '@core/roles';
 import type { WorkerRequest, WorkerResponse, LogSummary } from './protocol';
 import { DERIVED_PREFIX, SUBSYSTEM_PREFIX, VISION_PREFIX } from './protocol';
 import { analyzeCameras } from '@core/vision';
+import { findPoseJumps, findDisagreements, annotateFindings, describeFinding, type PoseFinding } from '@core/analyzers/poseDeviations';
+import { commandRowsFromLog, type CommandRow } from '@core/commands';
 import type { ModeRange } from '@core/robotState';
 
 interface Loaded {
@@ -32,7 +34,19 @@ interface Loaded {
   power?: PowerReport;
   roles: Partial<Record<Role, string>>;
   ranges: ModeRange[];
+  /** Auto paths, to say which one a finding happened in. */
+  pathSpans: { name: string; start: number; end: number }[];
+  /** The log's commands, read once when first needed. */
+  commandRows?: CommandRow[];
 }
+
+/** The log's commands from its best source, cached. */
+function commandsOf(L: Loaded): CommandRow[] {
+  if (!L.commandRows) L.commandRows = commandRowsFromLog(L.log);
+  return L.commandRows;
+}
+
+const visionEvent = (f: PoseFinding): PointEvent => ({ t: f.start, kind: 'vision', text: describeFinding(f), finding: f });
 
 const allFields = (L: Loaded): FieldInfo[] => [...L.log.fields, ...L.derivedFields, ...L.subFields, ...L.camFields];
 
@@ -79,6 +93,7 @@ function summarize(id: string, L: Loaded, overrides: Partial<Record<Role, string
   }
   const consoleLines = extractConsole(log);
   const events = extractEvents(log, consoleLines);
+  let poseJumps: PoseFinding[] = [];
   const power = analyzePower(log, robotState.ranges, { ...DEFAULT_THRESHOLDS, brownout: brownoutThreshold });
   L.power = power;
   L.roles = roles;
@@ -123,6 +138,15 @@ function summarize(id: string, L: Loaded, overrides: Partial<Record<Role, string
         speed[i] = v > MAX_ROBOT_SPEED ? NaN : v;
       }
       addDerived(`${DERIVED_PREFIX}Pose/Speed`, 'm/s', s.t, speed);
+      // Steps faster than a robot drives, while enabled: the position snapping to vision (or a reset)
+      const x = new Float64Array(n);
+      const y = new Float64Array(n);
+      for (let i = 0; i < n; i++) {
+        const p = (s.v[i] as { translation?: { x: number; y: number } }).translation;
+        x[i] = p ? p.x : NaN;
+        y[i] = p ? p.y : NaN;
+      }
+      poseJumps = findPoseJumps(s.t, x, y, robotState.ranges);
     }
   }
   // Electrical power = V * I
@@ -158,6 +182,12 @@ function summarize(id: string, L: Loaded, overrides: Partial<Record<Role, string
     }
   }
 
+  L.pathSpans = (paths?.segments ?? []).map((p) => ({ name: p.name, start: p.start, end: p.end }));
+  if (poseJumps.length) {
+    annotateFindings(poseJumps, commandsOf(L), L.pathSpans);
+    events.push(...poseJumps.map(visionEvent));
+    events.sort((a, b) => a.t - b.t);
+  }
   return {
     id,
     name: L.name,
@@ -208,6 +238,7 @@ self.onmessage = (ev: MessageEvent<WorkerRequest>) => {
           camFields: [],
           roles: {},
           ranges: [],
+          pathSpans: [],
         };
         logs.set(msg.id, L);
         post({ type: 'progress', id, stage: 'analyze', fraction: 1 });
@@ -312,7 +343,12 @@ self.onmessage = (ev: MessageEvent<WorkerRequest>) => {
             L.camFields.push(field(`${base}EstimateError`, 'number', 'm', c.error.t));
           }
         }
-        post({ type: 'cameras', id: msg.id, seq: msg.seq, summaries, fields: allFields(L) });
+        // where a camera stayed far from the robot position
+        const findings: PoseFinding[] = [];
+        for (const c of series) if (c.error) findings.push(...findDisagreements(c.name, c.error.t, c.error.v, L.ranges));
+        findings.sort((a, b) => a.start - b.start);
+        annotateFindings(findings, commandsOf(L), L.pathSpans);
+        post({ type: 'cameras', id: msg.id, seq: msg.seq, summaries, fields: allFields(L), findings });
         break;
       }
       case 'series': {

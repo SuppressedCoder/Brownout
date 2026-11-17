@@ -14,6 +14,7 @@ export const EVENT_GLYPHS: Record<string, { icon: IconName; tone: Tone; label: s
   warning: { icon: 'warning', tone: 'warn', label: 'Warning' },
   alert: { icon: 'alert', tone: 'pink', label: 'Alert' },
   disconnect: { icon: 'disconnect', tone: 'purple', label: 'Disconnect' },
+  vision: { icon: 'target', tone: 'orange', label: 'Position and vision' },
 };
 
 /** Line dash per field index so overlaid logs keep one color per log and one style per field. */

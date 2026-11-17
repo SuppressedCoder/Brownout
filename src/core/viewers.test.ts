@@ -7,6 +7,7 @@ import { commandsFromNames, commandsFromBooleans, detectCommandSources } from '.
 import { reportHtml, matchClock, matchTitle, type ReportInput } from './report';
 import type { ModeRange } from './robotState';
 import { logMatchKey, videoMatchScore, rankVideos } from './videoMatch';
+import { findPoseJumps, findDisagreements, annotateFindings, describeFinding } from './analyzers/poseDeviations';
 
 const field = (key: string, kind: FieldInfo['kind'], structName?: string): FieldInfo => ({ key, kind, type: kind, count: 1, structName }) as FieldInfo;
 
@@ -293,6 +294,29 @@ describe('match report', () => {
     expect(html).toContain('Battery</dt><dd>B7');
   });
 
+  it('lists where the robot position jumped or a camera disagreed, largest first', () => {
+    const finding = (kind: 'jump' | 'disagree', t: number, size: number) => ({
+      kind,
+      start: t,
+      end: t + 0.5,
+      size,
+      camera: 'Front',
+      mode: 'teleop',
+      during: ['AutoAlign'],
+    });
+    const html = reportHtml({
+      ...input,
+      events: [
+        ...input.events,
+        { t: 70, kind: 'vision', text: 'Robot position jumped 0.62 m during AutoAlign', finding: finding('jump', 70, 0.62) },
+        { t: 80, kind: 'vision', text: 'Front was 1.10 m from the robot position for 0.5 s during AutoAlign', finding: finding('disagree', 80, 1.1) },
+      ],
+    });
+    expect(html).toContain('Position and vision');
+    expect(html).toContain('Robot position jumped 0.62 m during AutoAlign');
+    expect(reportHtml(input)).not.toContain('Position and vision');
+  });
+
   it('still makes a report when most things are not logged', () => {
     const bare = reportHtml({
       ...input,
@@ -346,5 +370,63 @@ describe('finding the match video for a log', () => {
   it('ranks the specific name and the event first', () => {
     const files = ['Match 12.mp4', 'Q12.mp4', 'NYROC Q12.mp4', 'Q13.mp4'].map((name) => ({ name, path: `/v/${name}` }));
     expect(rankVideos(files, { kind: 'q', number: 12, event: 'NYROC' }).map((f) => f.name)).toEqual(['NYROC Q12.mp4', 'Q12.mp4', 'Match 12.mp4']);
+  });
+});
+
+describe('where vision and the robot position disagree', () => {
+  const ranges: ModeRange[] = [
+    { start: 0, end: 5, mode: 'disabled' },
+    { start: 5, end: 20, mode: 'auto' },
+    { start: 20, end: 30, mode: 'disabled' },
+  ];
+  it('finds a pose jump while enabled, not normal driving, a jump while disabled, or a reset as auto starts', () => {
+    // 50 Hz, driving 2 m/s along x; a 0.6 m snap at t = 10 s, one at 25 s (disabled), a reset at 5.1 s (auto just began)
+    const t: number[] = [];
+    const x: number[] = [];
+    const y: number[] = [];
+    let px = 0;
+    for (let i = 0; i <= 1500; i++) {
+      const ti = i / 50;
+      px += 2 / 50;
+      if (i === 500 || i === 1250) px += 0.6;
+      if (i === 255) px += 3;
+      t.push(ti);
+      x.push(px);
+      y.push(0);
+    }
+    const jumps = findPoseJumps(t, x, y, ranges);
+    expect(jumps.length).toBe(1);
+    expect(jumps[0].start).toBeCloseTo(10, 5);
+    expect(jumps[0].size).toBeCloseTo(0.64, 2);
+    expect(jumps[0].mode).toBe('auto');
+  });
+  it('finds a camera that stays far from the robot, not a single bad frame', () => {
+    const t: number[] = [];
+    const e: number[] = [];
+    for (let i = 0; i < 600; i++) {
+      const ti = 5 + i / 30;
+      t.push(ti);
+      // one bad frame at 6 s; a 0.5 s stretch of 0.8 to 1.1 m from 10 s
+      e.push(i === 30 ? 2 : ti >= 10 && ti < 10.5 ? 0.8 + (ti - 10) * 0.6 : 0.1);
+    }
+    const d = findDisagreements('Front', t, e, ranges);
+    expect(d.length).toBe(1);
+    expect(d[0].camera).toBe('Front');
+    expect(d[0].start).toBeCloseTo(10, 5);
+    expect(d[0].end).toBeGreaterThan(10.4);
+    expect(d[0].size).toBeCloseTo(1.09, 1);
+  });
+  it('says what was running: the path, then the most specific command', () => {
+    const f = findPoseJumps([9.9, 10], [0, 1], [0, 0], ranges);
+    annotateFindings(
+      f,
+      [
+        { name: 'Drive', runs: [{ start: 5, end: 20 }], total: 15 },
+        { name: 'AutoAlign', runs: [{ start: 9, end: 11 }], total: 2 },
+      ] as never,
+      [{ name: 'Path 2', start: 8, end: 12 }],
+    );
+    expect(f[0].during).toEqual(['Path 2', 'AutoAlign', 'Drive']);
+    expect(describeFinding(f[0])).toBe('Robot position jumped 1.00 m during Path 2 (AutoAlign, Drive)');
   });
 });

@@ -3,6 +3,7 @@
  * WPILib alerts and error fields into one list with severities, plus point
  * events for the timeline (brownouts, reboots, loop overruns, errors).
  */
+import type { PoseFinding } from './poseDeviations';
 import type { LogData } from '../log';
 import { resolveRole } from '../roles';
 
@@ -17,8 +18,10 @@ export interface ConsoleLine {
 
 export interface PointEvent {
   t: number;
-  kind: 'brownout' | 'reboot' | 'overrun' | 'error' | 'warning' | 'alert' | 'disconnect';
+  kind: 'brownout' | 'reboot' | 'overrun' | 'error' | 'warning' | 'alert' | 'disconnect' | 'vision';
   text: string;
+  /** For 'vision' events: the robot position jumped, or a camera disagreed with it (analyzers/poseDeviations.ts). */
+  finding?: PoseFinding;
 }
 
 const CONSOLE_KEYS = ['console', 'messages', '/RealOutputs/Console', 'NT:/AdvantageKit/RealOutputs/Console', 'DS:/Dscomm/Console'];

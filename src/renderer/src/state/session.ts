@@ -292,7 +292,18 @@ async function reanalyzeProfile(profileId: string): Promise<void> {
     const summary = await client.reanalyze(l.id, profile.roleOverrides, sessionStore.get().brownoutThreshold);
     sessionStore.set((st) => ({
       logs: recomputeOffsets(
-        st.logs.map((x) => (x.id === l.id ? { ...x, ...summary, name: x.name, roleOverrides: profile.roleOverrides, subsystems: undefined } : x)),
+        st.logs.map((x) =>
+          x.id === l.id
+            ? {
+                ...x,
+                ...summary,
+                name: x.name,
+                roleOverrides: profile.roleOverrides,
+                subsystems: undefined,
+                events: keepCameraFindings(summary.events, x.events),
+              }
+            : x,
+        ),
         st.alignMode,
       ),
     }));
@@ -325,7 +336,17 @@ export async function assignProfile(logId: string, profileId: string): Promise<v
   sessionStore.set((st) => ({
     logs: recomputeOffsets(
       st.logs.map((x) =>
-        x.id === logId ? { ...x, ...summary, name: x.name, roleOverrides: profile.roleOverrides, profileId: profile.id, subsystems: undefined } : x,
+        x.id === logId
+          ? {
+              ...x,
+              ...summary,
+              name: x.name,
+              roleOverrides: profile.roleOverrides,
+              profileId: profile.id,
+              subsystems: undefined,
+              events: keepCameraFindings(summary.events, x.events),
+            }
+          : x,
       ),
       st.alignMode,
     ),
@@ -343,7 +364,9 @@ export async function setBrownoutThreshold(v: number): Promise<void> {
     const summary = await client.reanalyze(l.id, l.roleOverrides, v);
     sessionStore.set((st) => ({
       logs: recomputeOffsets(
-        st.logs.map((x) => (x.id === l.id ? { ...x, ...summary, name: x.name, subsystems: undefined } : x)),
+        st.logs.map((x) =>
+          x.id === l.id ? { ...x, ...summary, name: x.name, subsystems: undefined, events: keepCameraFindings(summary.events, x.events) } : x,
+        ),
         st.alignMode,
       ),
     }));
@@ -434,3 +457,9 @@ export function removeTimelineTrack(key: string): void {
 }
 
 export const primaryLog = (): LogEntry | undefined => sessionStore.get().logs[0];
+
+/** A re-analysis brings the log's own events; camera disagreements come from the camera analysis, so carry them over. */
+function keepCameraFindings(fresh: LogEntry['events'], old: LogEntry['events']): LogEntry['events'] {
+  const cam = old.filter((e) => e.kind === 'vision' && e.finding?.kind === 'disagree');
+  return cam.length ? [...fresh, ...cam].sort((a, b) => a.t - b.t) : fresh;
+}

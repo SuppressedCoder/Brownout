@@ -1,4 +1,5 @@
 /** Messages between the renderer and the log worker. */
+import type { PoseFinding } from '@core/analyzers/poseDeviations';
 import type { FieldInfo, Series } from '@core/log';
 import type { RobotStateSummary, MatchInfo, Era } from '@core/robotState';
 import type { HealthItem } from '@core/analyzers/health';
@@ -56,7 +57,7 @@ export type WorkerResponse =
   | { type: 'series'; id: string; key: string; series: Series | null }
   | { type: 'reanalyzed'; summary: LogSummary }
   | { type: 'subsystems'; id: string; seq: number; report: SubsystemReport | null; fields?: FieldInfo[] }
-  | { type: 'cameras'; id: string; seq: number; summaries: CameraSummary[] | null; fields?: FieldInfo[] }
+  | { type: 'cameras'; id: string; seq: number; summaries: CameraSummary[] | null; fields?: FieldInfo[]; findings?: PoseFinding[] }
   | { type: 'error'; id?: string; message: string };
 
 /** Derived fields the worker adds to the field list. */

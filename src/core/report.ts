@@ -307,6 +307,17 @@ export function reportHtml(input: ReportInput): string {
     body += `<section><h2>Vision</h2><table><thead><tr><th>Camera</th><th class="r">Saw a tag</th><th class="r">Typical error</th><th class="r">Worst error</th><th>Blind while enabled</th></tr></thead><tbody>${rows.join('')}</tbody></table><p class="muted">"Saw a tag" is the share of enabled time with at least one AprilTag in view. Error is the distance between the camera's pose estimate and the robot's logged pose.</p></section>`;
   }
 
+  // Where the robot position jumped or a camera disagreed with it, and what was running
+  const vision = input.events.filter((e) => e.kind === 'vision' && e.finding);
+  if (vision.length) {
+    const biggest = [...vision]
+      .sort((a, b) => b.finding!.size - a.finding!.size)
+      .slice(0, 6)
+      .sort((a, b) => a.t - b.t);
+    const rows = biggest.map((e) => `<tr><td>${esc(matchClock(st, e.t))}</td><td>${esc(e.text)}</td></tr>`);
+    body += `<section><h2>Position and vision</h2><table><thead><tr><th>When</th><th>What happened</th></tr></thead><tbody>${rows.join('')}</tbody></table><p class="muted">${vision.length} in all${vision.length > biggest.length ? `; the ${biggest.length} largest are listed` : ''}. A jump is the robot position moving further in one step than a robot can drive, usually a vision correction. A disagreement is a camera's estimate staying 0.5 m or more from the robot position. Either can throw off an action that aims or drives by position.</p></section>`;
+  }
+
   if (input.missing.length)
     body += `<section><h2>Not in this log</h2><p class="muted">${input.missing.map(esc).join(', ')}. Sections that need these are shorter or left out.</p></section>`;
 

@@ -85,6 +85,12 @@ export function ComparePanel({ id }: { id: string }) {
         onClick: (l) => jumpTo(l, l.events.find((e) => e.kind === 'overrun')?.t),
       },
       {
+        id: 'vision',
+        label: 'Position vs vision',
+        value: (l) => l.events.filter((e) => e.kind === 'vision').length,
+        onClick: (l) => jumpTo(l, l.events.find((e) => e.kind === 'vision')?.t),
+      },
+      {
         id: 'errors',
         label: 'Errors',
         value: (l) => l.console.filter((c) => c.severity === 'error').length,
