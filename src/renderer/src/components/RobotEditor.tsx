@@ -3,15 +3,21 @@
  * 2D field. A part is a rectangle, an ellipse, or a picture / SVG. Parts sit
  * still by default; any part can be linked to a logged angle (a turret, a
  * hood, a swerve module) and then turns around its pivot as the log plays.
+ * A part can be attached to another part: it moves with that part, and its
+ * own angle adds on top (a wrist on an arm). The pivot is dragged in the
+ * preview or picked from the part's center and ends.
  * Everything is stored in the robot profile.
+ *
+ * The test angle lives in a small store, not React state, so moving it only
+ * redraws the preview.
  */
-import { useEffect, useRef, useState } from 'react';
-import { profileStore, updateProfile, newId, type Layer } from '../state/profiles';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { profileStore, updateProfile, newId, PART_LIMIT, type Layer } from '../state/profiles';
 import { settingsStore } from '../state/settings';
 import { uiStore, toast } from '../state/ui';
-import { useStore } from '../state/store';
+import { useStore, createStore, type Store } from '../state/store';
 import { useCanvas } from '../lib/useCanvas';
-import { drawLayers, linkAngle } from '../lib/robotDraw';
+import { drawLayers, linkAngle, ancestors, enterPart, enterPivotFrame } from '../lib/robotDraw';
 import { fieldAssetTicker } from '../lib/fieldAssets';
 import { T } from '../lib/theme';
 import { withAlpha } from '../lib/colors';
@@ -26,25 +32,71 @@ const PART_COLORS = ['#f2c94c', '#56ccf2', '#bb6bd9', '#6fcf97', '#f2994a', '#eb
 const snap = (v: number) => Math.round(v * 200) / 200;
 const fmt = (v: number) => String(Math.round(v * 1000) / 1000);
 
-/** A point in the robot frame, in the part's own frame (undoing its link turn, position and rotation). */
-function toLocal(l: Layer, x: number, y: number, preview: number): { x: number; y: number } {
-  let px = x;
-  let py = y;
-  if (l.link) {
-    const a = -linkAngle(l, null, 0, preview);
-    const dx = px - l.pivot.x;
-    const dy = py - l.pivot.y;
-    px = l.pivot.x + dx * Math.cos(a) - dy * Math.sin(a);
-    py = l.pivot.y + dx * Math.sin(a) + dy * Math.cos(a);
-  }
+/** Undo a linked part's turn about its pivot, for a point in the robot frame. */
+function undoTurn(l: Layer, x: number, y: number, preview: number): { x: number; y: number } {
+  if (!l.link) return { x, y };
+  const a = -linkAngle(l, null, 0, preview);
+  const dx = x - l.pivot.x;
+  const dy = y - l.pivot.y;
+  return { x: l.pivot.x + dx * Math.cos(a) - dy * Math.sin(a), y: l.pivot.y + dx * Math.sin(a) + dy * Math.cos(a) };
+}
+
+/** A point in the robot frame, in the frame a part's pivot is given in (undoing the turns of the parts it hangs from). */
+function toPivotFrame(l: Layer, layers: Layer[], x: number, y: number, preview: number): { x: number; y: number } {
+  let p = { x, y };
+  for (const a of ancestors(l, layers)) p = undoTurn(a, p.x, p.y, preview);
+  return p;
+}
+
+/** A point in the robot frame, in the part's own frame (undoing the parts it hangs from, its turn, position and rotation). */
+function toLocal(l: Layer, layers: Layer[], x: number, y: number, preview: number): { x: number; y: number } {
+  const q = toPivotFrame(l, layers, x, y, preview);
+  const p = undoTurn(l, q.x, q.y, preview);
   const r = (-l.rotation * Math.PI) / 180;
-  const dx = px - l.x;
-  const dy = py - l.y;
+  const dx = p.x - l.x;
+  const dy = p.y - l.y;
   return { x: dx * Math.cos(r) - dy * Math.sin(r), y: dx * Math.sin(r) + dy * Math.cos(r) };
 }
 
-function hit(l: Layer, x: number, y: number, preview: number): boolean {
-  const p = toLocal(l, x, y, preview);
+/** How far the part is turned in all: the parts it hangs from, and its own link. */
+function totalTurn(l: Layer, layers: Layer[], preview: number): number {
+  let a = linkAngle(l, null, 0, preview);
+  for (const p of ancestors(l, layers)) a += linkAngle(p, null, 0, preview);
+  return a;
+}
+
+/** Where on a part it can turn around, in its own frame (before its fixed rotation). */
+const ANCHORS: [string, string, (l: Layer) => [number, number]][] = [
+  ['center', 'its center', () => [0, 0]],
+  ['back', 'its back end', (l) => [-l.length / 2, 0]],
+  ['front', 'its front end', (l) => [l.length / 2, 0]],
+  ['left', 'its left side', (l) => [0, l.width / 2]],
+  ['right', 'its right side', (l) => [0, -l.width / 2]],
+];
+
+/** The robot-frame point for an anchor on a part. */
+function anchorPoint(l: Layer, id: string): { x: number; y: number } {
+  const [ax, ay] = (ANCHORS.find((a) => a[0] === id) ?? ANCHORS[0])[2](l);
+  const r = (l.rotation * Math.PI) / 180;
+  return { x: l.x + ax * Math.cos(r) - ay * Math.sin(r), y: l.y + ax * Math.sin(r) + ay * Math.cos(r) };
+}
+
+/** Which anchor the pivot sits on, or 'custom'. */
+function anchorOf(l: Layer): string {
+  for (const [id] of ANCHORS) {
+    const p = anchorPoint(l, id);
+    if (Math.abs(p.x - l.pivot.x) < 1e-3 && Math.abs(p.y - l.pivot.y) < 1e-3) return id;
+  }
+  return 'custom';
+}
+
+/** Parts a part may be attached to: not itself, and not a part that hangs from it. */
+function parentChoices(l: Layer, layers: Layer[]): Layer[] {
+  return layers.filter((x) => x.id !== l.id && !ancestors(x, layers).some((a) => a.id === l.id));
+}
+
+function hit(l: Layer, layers: Layer[], x: number, y: number, preview: number): boolean {
+  const p = toLocal(l, layers, x, y, preview);
   const hx = Math.max(l.length / 2, 0.02);
   const hy = Math.max(l.width / 2, 0.02);
   if (l.kind === 'ellipse') return (p.x / hx) ** 2 + (p.y / hy) ** 2 <= 1;
@@ -141,14 +193,28 @@ export function RobotEditor({ profileId }: { profileId: string }) {
   // select the list, then find: the selector must not close over a prop
   const profile = useStore(profileStore, (s) => s.profiles).find((p) => p.id === profileId);
   const [selected, setSelected] = useState<string | null>(null);
-  const [testDeg, setTestDeg] = useState(0);
+  // the test angle, in degrees: a store so the slider redraws only the preview
+  const test = useMemo(() => createStore({ deg: 0 }), []);
   const [picking, setPicking] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const view = useRef({ cx: 0, cy: 0, scale: 100 });
-  const drag = useRef<{ id: string; startX: number; startY: number; x: number; y: number; px: number; py: number; pivotFollows: boolean } | null>(null);
+  const drag = useRef<{
+    id: string;
+    startX: number;
+    startY: number;
+    x: number;
+    y: number;
+    px: number;
+    py: number;
+    pivotFollows: boolean;
+    /** Dragging the pivot marker rather than the part. */
+    pivot: boolean;
+    /** The part's total turn when the drag began, to move it in its own directions. */
+    turn: number;
+  } | null>(null);
   const layers = profile?.layers ?? [];
   const sel = layers.find((l) => l.id === selected) ?? null;
-  const preview = (testDeg * Math.PI) / 180;
+  const previewNow = () => (test.get().deg * Math.PI) / 180;
   const anyLinked = layers.some((l) => l.link);
 
   const setLayers = (fn: (l: Layer[]) => Layer[]) => updateProfile(profileId, (p) => ({ layers: fn(p.layers) }));
@@ -264,24 +330,21 @@ export function RobotEditor({ profileId }: { profileId: string }) {
       ctx.moveTo(0, 0);
       ctx.lineTo(w / 2, 0);
       ctx.stroke();
+      const preview = (test.get().deg * Math.PI) / 180;
       drawLayers(ctx, p.layers, scale, null, 0, preview);
       const s = p.layers.find((l) => l.id === selected);
       if (s) {
         ctx.save();
-        if (s.link) {
-          ctx.translate(s.pivot.x * scale, -s.pivot.y * scale);
-          ctx.rotate(-linkAngle(s, null, 0, preview));
-          ctx.translate(-s.pivot.x * scale, s.pivot.y * scale);
-        }
-        ctx.translate(s.x * scale, -s.y * scale);
-        ctx.rotate((-s.rotation * Math.PI) / 180);
+        enterPart(ctx, s, p.layers, scale, null, 0, preview);
         ctx.strokeStyle = pal.strong;
         ctx.lineWidth = 1.5;
         ctx.setLineDash([5, 3]);
         ctx.strokeRect((-s.length * scale) / 2 - 2, (-s.width * scale) / 2 - 2, s.length * scale + 4, s.width * scale + 4);
         ctx.restore();
         if (s.link) {
-          // pivot marker
+          // pivot marker (drag it to move the pivot), in the frame of the parts it hangs from
+          ctx.save();
+          enterPivotFrame(ctx, s, p.layers, scale, null, 0, preview);
           const px = s.pivot.x * scale;
           const py = -s.pivot.y * scale;
           ctx.strokeStyle = pal.strong;
@@ -298,6 +361,7 @@ export function RobotEditor({ profileId }: { profileId: string }) {
           ctx.moveTo(px, py - 8);
           ctx.lineTo(px, py + 8);
           ctx.stroke();
+          ctx.restore();
         }
       }
       ctx.restore();
@@ -310,8 +374,8 @@ export function RobotEditor({ profileId }: { profileId: string }) {
       ctx.textBaseline = 'bottom';
       ctx.fillText('Grid: 10 cm', 8, height - 6);
     },
-    [profileStore, settingsStore, fieldAssetTicker],
-    [profileId, selected, preview],
+    [profileStore, settingsStore, fieldAssetTicker, test],
+    [profileId, selected],
   );
 
   /** Screen position (inside the canvas) to the robot frame: up is forward, left is left. */
@@ -322,10 +386,24 @@ export function RobotEditor({ profileId }: { profileId: string }) {
   };
   const onDown = (e: React.MouseEvent) => {
     const p = toRobot(e);
-    // the last part is drawn on top
-    const top = [...layers].reverse().find((l) => hit(l, p.x, p.y, preview));
+    const preview = previewNow();
+    const clamp = (v: number) => snap(Math.max(-PART_LIMIT, Math.min(PART_LIMIT, v)));
+    // the selected part's pivot marker comes first: it sits on top of parts
+    const onPivot = (() => {
+      if (!sel?.link) return false;
+      // a pivot at the part's center sits under the part: a plain drag moves the part, Alt-drag the pivot
+      if (Math.abs(sel.pivot.x - sel.x) < 1e-6 && Math.abs(sel.pivot.y - sel.y) < 1e-6 && !e.altKey) return false;
+      const q = toPivotFrame(sel, layers, p.x, p.y, preview);
+      return Math.hypot(q.x - sel.pivot.x, q.y - sel.pivot.y) * view.current.scale <= 9;
+    })();
+    // else the last part drawn (on top) under the pointer
+    const top = onPivot ? sel : [...layers].reverse().find((l) => hit(l, layers, p.x, p.y, preview));
     setSelected(top?.id ?? null);
     if (!top) return;
+    const pivotFollows = Math.abs(top.pivot.x - top.x) < 1e-6 && Math.abs(top.pivot.y - top.y) < 1e-6;
+    // the pivot, and a part turning about its own center, move in the directions of the parts they hang from;
+    // a part turning about another point moves in its own turned directions
+    const own = linkAngle(top, null, 0, preview);
     drag.current = {
       id: top.id,
       startX: p.x,
@@ -334,14 +412,27 @@ export function RobotEditor({ profileId }: { profileId: string }) {
       y: top.y,
       px: top.pivot.x,
       py: top.pivot.y,
-      pivotFollows: Math.abs(top.pivot.x - top.x) < 1e-6 && Math.abs(top.pivot.y - top.y) < 1e-6,
+      pivotFollows,
+      pivot: onPivot,
+      turn: onPivot || pivotFollows ? totalTurn(top, layers, preview) - own : totalTurn(top, layers, preview),
     };
     const onMove = (ev: MouseEvent) => {
       const d = drag.current;
       if (!d) return;
       const q = toRobot(ev);
-      const x = snap(Math.max(-3, Math.min(3, d.x + q.x - d.startX)));
-      const y = snap(Math.max(-3, Math.min(3, d.y + q.y - d.startY)));
+      // the pointer's move, turned back into the part's own directions
+      const mx = q.x - d.startX;
+      const my = q.y - d.startY;
+      const c = Math.cos(-d.turn);
+      const sn = Math.sin(-d.turn);
+      const dx = mx * c - my * sn;
+      const dy = mx * sn + my * c;
+      if (d.pivot) {
+        patch(d.id, { pivot: { x: clamp(d.px + dx), y: clamp(d.py + dy) } });
+        return;
+      }
+      const x = clamp(d.x + dx);
+      const y = clamp(d.y + dy);
       patch(d.id, d.pivotFollows ? { x, y, pivot: { x, y } } : { x, y });
     };
     const onUp = () => {
@@ -357,22 +448,15 @@ export function RobotEditor({ profileId }: { profileId: string }) {
   return (
     <div className="robot-editor" data-testid="robot-editor">
       <div className="robot-preview">
-        <canvas ref={canvasRef} onMouseDown={onDown} data-testid="robot-preview" />
-        {anyLinked && (
-          <label className="robot-test" title="Preview only: turns every linked part by this angle, as a logged angle would">
-            Test angle
-            <input
-              type="range"
-              min={-180}
-              max={180}
-              step={1}
-              value={testDeg}
-              onChange={(e) => setTestDeg(Number(e.target.value))}
-              data-testid="robot-test-angle"
-            />
-            <span className="mono">{testDeg}°</span>
-          </label>
-        )}
+        <div className="robot-canvas-host">
+          <canvas
+            ref={canvasRef}
+            onMouseDown={onDown}
+            data-testid="robot-preview"
+            title="Drag a part to move it. Drag the round marker to move a part's pivot (Alt-drag when the pivot is at the part's center)."
+          />
+        </div>
+        {anyLinked && <TestAngle store={test} />}
       </div>
       <div className="robot-side scroll">
         <div className="robot-add">
@@ -450,17 +534,31 @@ export function RobotEditor({ profileId }: { profileId: string }) {
             <div className="robot-pair" title="Where the part's center is, measured from the robot's center">
               Position
               <span className="size-inputs">
-                <Num value={sel.x} min={-3} max={3} title="Forward of the robot's center (m)" onChange={(v) => patch(sel.id, { x: v })} testId="layer-x" />{' '}
+                <Num
+                  value={sel.x}
+                  min={-PART_LIMIT}
+                  max={PART_LIMIT}
+                  title="Forward of the robot's center (m)"
+                  onChange={(v) => patch(sel.id, { x: v })}
+                  testId="layer-x"
+                />{' '}
                 forward,
-                <Num value={sel.y} min={-3} max={3} title="Left of the robot's center (m)" onChange={(v) => patch(sel.id, { y: v })} testId="layer-y" /> left
-                (m)
+                <Num
+                  value={sel.y}
+                  min={-PART_LIMIT}
+                  max={PART_LIMIT}
+                  title="Left of the robot's center (m)"
+                  onChange={(v) => patch(sel.id, { y: v })}
+                  testId="layer-y"
+                />{' '}
+                left (m)
               </span>
             </div>
             <div className="robot-pair" title="Length runs along the robot's front-to-back direction, width across it">
               Size
               <span className="size-inputs">
-                <Num value={sel.length} min={0.01} max={4} title="Length (m)" onChange={(v) => patch(sel.id, { length: v })} testId="layer-length" /> ×
-                <Num value={sel.width} min={0.01} max={4} title="Width (m)" onChange={(v) => patch(sel.id, { width: v })} /> m
+                <Num value={sel.length} min={0.01} max={PART_LIMIT} title="Length (m)" onChange={(v) => patch(sel.id, { length: v })} testId="layer-length" /> ×
+                <Num value={sel.width} min={0.01} max={PART_LIMIT} title="Width (m)" onChange={(v) => patch(sel.id, { width: v })} /> m
               </span>
             </div>
             <div className="robot-pair">
@@ -480,6 +578,23 @@ export function RobotEditor({ profileId }: { profileId: string }) {
               Opacity
               <input type="range" min={0.05} max={1} step={0.05} value={sel.opacity} onChange={(e) => patch(sel.id, { opacity: Number(e.target.value) })} />
               {sel.kind !== 'image' && <input type="color" value={sel.color} title="Color" onChange={(e) => patch(sel.id, { color: e.target.value })} />}
+            </div>
+            <div className="robot-pair" title="Attach this part to another: it then moves with that part's turn (a claw on an arm, a wrist on an elbow)">
+              Attached to
+              <select
+                className="tool-select"
+                value={sel.parent ?? ''}
+                onChange={(e) => patch(sel.id, { parent: e.target.value || null })}
+                data-testid="layer-parent"
+              >
+                <option value="">the robot</option>
+                {parentChoices(sel, layers).map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.name}
+                    {l.link ? '' : ' (does not turn)'}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="robot-link">
               <div className="robot-pair">
@@ -521,16 +636,44 @@ export function RobotEditor({ profileId }: { profileId: string }) {
                       <Num value={sel.link.offset} min={-360} max={360} onChange={(v) => patch(sel.id, { link: { ...sel.link!, offset: v } })} /> °
                     </span>
                   </div>
-                  <div className="robot-pair" title="The point the part turns around, measured from the robot's center">
+                  <div className="robot-pair" title="The point the part turns around. You can also drag the round marker in the preview.">
+                    Turns around
+                    <select
+                      className="tool-select"
+                      value={anchorOf(sel)}
+                      onChange={(e) => e.target.value !== 'custom' && patch(sel.id, { pivot: anchorPoint(sel, e.target.value) })}
+                      data-testid="layer-anchor"
+                    >
+                      {ANCHORS.map(([id, label]) => (
+                        <option key={id} value={id}>
+                          {label}
+                        </option>
+                      ))}
+                      <option value="custom">a point I set</option>
+                    </select>
+                  </div>
+                  <div className="robot-pair" title="The pivot, measured from the robot's center with every angle at zero">
                     Pivot
                     <span className="size-inputs">
-                      <Num value={sel.pivot.x} min={-3} max={3} title="Forward (m)" onChange={(v) => patch(sel.id, { pivot: { ...sel.pivot, x: v } })} />{' '}
+                      <Num
+                        value={sel.pivot.x}
+                        min={-PART_LIMIT}
+                        max={PART_LIMIT}
+                        title="Forward (m)"
+                        onChange={(v) => patch(sel.id, { pivot: { ...sel.pivot, x: v } })}
+                        testId="layer-pivot-x"
+                      />{' '}
                       forward,
-                      <Num value={sel.pivot.y} min={-3} max={3} title="Left (m)" onChange={(v) => patch(sel.id, { pivot: { ...sel.pivot, y: v } })} /> left
+                      <Num
+                        value={sel.pivot.y}
+                        min={-PART_LIMIT}
+                        max={PART_LIMIT}
+                        title="Left (m)"
+                        onChange={(v) => patch(sel.id, { pivot: { ...sel.pivot, y: v } })}
+                        testId="layer-pivot-y"
+                      />{' '}
+                      left
                     </span>
-                    <button className="btn small" onClick={() => patch(sel.id, { pivot: { x: sel.x, y: sel.y } })} title="Turn the part around its own center">
-                      Center
-                    </button>
                   </div>
                 </>
               )}
@@ -553,6 +696,26 @@ export function RobotEditor({ profileId }: { profileId: string }) {
         />
       )}
     </div>
+  );
+}
+
+/** Preview only: turns every linked part by this angle, as a logged angle would. Re-renders only itself. */
+function TestAngle({ store }: { store: Store<{ deg: number }> }) {
+  const deg = useStore(store, (s) => s.deg);
+  return (
+    <label className="robot-test" title="Preview only: turns every linked part by this angle, as a logged angle would">
+      Test angle
+      <input
+        type="range"
+        min={-180}
+        max={180}
+        step={1}
+        value={deg}
+        onChange={(e) => store.set({ deg: Number(e.target.value) })}
+        data-testid="robot-test-angle"
+      />
+      <span className="mono">{deg}°</span>
+    </label>
   );
 }
 

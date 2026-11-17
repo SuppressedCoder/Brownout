@@ -52,7 +52,7 @@ npm run dev       # run the app
 - **New per-robot setting:** a field in `RobotProfile` with a default in `blankProfile()` and a guard in `normalizeProfile()` (`state/profiles.ts`), a control in `components/RobotSettings.tsx`.
 - **New field season:** add the picture and tag JSON under `src/renderer/src/assets/fields/`, an entry in `fields.json`, the imports in `lib/fieldAssets.ts`, and the season in `SEASONS` (`src/core/field.ts`).
 - **New setting:** field + default in `state/settings.ts`, a control in `components/Settings.tsx`.
-- **New thing drawn on the robot:** it is a `Layer` in the profile, drawn by `drawLayers` (`lib/robotDraw.ts`) for both the 2D field and the editor preview; the canvas is already at the robot's center and heading (+x forward, -y left).
+- **New thing drawn on the robot:** it is a `Layer` in the profile, drawn by `drawLayers` (`lib/robotDraw.ts`) for both the 2D field and the editor preview; the canvas is already at the robot's center and heading (+x forward, -y left). A layer may hang from another (`parent`): use `enterPart` to get into a part's frame (it applies the turns of the parts it hangs from), never the layer's own transform alone.
 - **New report section:** `src/core/report.ts` (pure, HTML-escaped with `esc`, sections with no data left out) plus the matching field in `ReportInput` and `lib/report.ts`; extend the test in `viewers.test.ts`.
 - **New analyzer:** `src/core/analyzers/<name>.ts` (pure function of `LogData` + mode ranges) → call it in the worker's `summarize()` → surface in a panel. Findings carry raw-time stamps so the UI can jump to them.
 - **New derived field:** add it in `summarize()` with `addDerived('/Brownout/...')`; it appears in the field tree like any field.

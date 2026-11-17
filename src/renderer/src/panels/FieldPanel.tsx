@@ -67,6 +67,9 @@ export function FieldPanel({ id }: { id: string }) {
   const hasPicture = !!fieldPicture(seasonId);
   const showImage = settings.showImage !== false;
   const isCustom = seasonId.startsWith('custom-');
+  // the parts of every robot shown (usually one profile)
+  const profiles = useStore(profileStore, (s) => s.profiles);
+  const partList = [...new Set(logs.map((l) => l.profileId))].flatMap((pid) => (profiles.find((p) => p.id === pid) ?? profileById(pid)).layers);
 
   const loadPicture = async () => {
     try {
@@ -164,6 +167,37 @@ export function FieldPanel({ id }: { id: string }) {
                 description="Which fields each camera logs, its color and where it is mounted"
                 onClick={() => (close(), uiStore.set({ camerasFor: logs[0]?.profileId ?? profileById(undefined).id }))}
               />
+              <MenuItem
+                label="Robot names"
+                description="Each log's name by its robot"
+                checked={settings.showLabels !== false}
+                onClick={() => set({ showLabels: settings.showLabels === false })}
+              />
+              <MenuItem
+                label="Robot parts"
+                description={partList.length ? 'The shapes and pictures added in the robot editor' : 'No parts yet: add them with Edit the robot'}
+                checked={settings.showParts !== false && partList.length > 0}
+                disabled={!partList.length}
+                onClick={() => set({ showParts: settings.showParts === false })}
+                testId="field-show-parts"
+              />
+              {settings.showParts !== false &&
+                partList.map((l) => (
+                  <MenuItem
+                    key={l.id}
+                    label={l.name}
+                    description="Robot part"
+                    checked={!(settings.hiddenParts ?? []).includes(l.id)}
+                    onClick={() =>
+                      set({
+                        hiddenParts: (settings.hiddenParts ?? []).includes(l.id)
+                          ? (settings.hiddenParts ?? []).filter((x) => x !== l.id)
+                          : [...(settings.hiddenParts ?? []), l.id],
+                      })
+                    }
+                    testId="field-part"
+                  />
+                ))}
               <MenuItem
                 icon="robot"
                 label="Edit the robot…"
@@ -505,6 +539,7 @@ function drawField(dc: DrawContext, id: string, viewRef: React.MutableRefObject<
   for (const log of logs) {
     const raw = tCursor - log.offset;
     const profile = profileById(log.profileId);
+    const hiddenParts = new Set(settings.hiddenParts ?? []);
     const size = profile.robot;
     let robot: Pose | undefined;
     const prep = (p: Pose | undefined) => posePrep(p, log, season, session.normalizeAlliance);
@@ -581,7 +616,20 @@ function drawField(dc: DrawContext, id: string, viewRef: React.MutableRefObject<
             ctx.stroke();
             drawRobot(ctx, target, X, Y, scale, sign, size, pal.strong, 'ghost');
           }
-          drawRobot(ctx, p, X, Y, scale, sign, size, log.color, 'solid', log.name, log.matchInfo.alliance, { layers: profile.layers, logId: log.id, raw });
+          drawRobot(
+            ctx,
+            p,
+            X,
+            Y,
+            scale,
+            sign,
+            size,
+            log.color,
+            'solid',
+            settings.showLabels !== false ? log.name : undefined,
+            log.matchInfo.alliance,
+            settings.showParts !== false ? { layers: profile.layers, logId: log.id, raw, hidden: hiddenParts } : undefined,
+          );
           robot = p;
         }
       }
@@ -775,7 +823,7 @@ function drawRobot(
   style: 'solid' | 'ghost',
   label?: string,
   alliance?: 'red' | 'blue',
-  parts?: { layers: Layer[]; logId: string; raw: number },
+  parts?: { layers: Layer[]; logId: string; raw: number; hidden?: ReadonlySet<string> },
   /** Put the label under the robot, on this line (0 = first): for camera estimates, which sit on top of the robot. */
   labelBelow: number | false = false,
 ) {
@@ -805,7 +853,7 @@ function drawRobot(
   ctx.moveTo(0, 0);
   ctx.lineTo(w / 2, 0);
   ctx.stroke();
-  if (parts && parts.layers.length) drawLayers(ctx, parts.layers, scale, parts.logId, parts.raw);
+  if (parts && parts.layers.length) drawLayers(ctx, parts.layers, scale, parts.logId, parts.raw, undefined, parts.hidden);
   ctx.restore();
   if (label) {
     ctx.fillStyle = style === 'solid' ? pal.strong : color;

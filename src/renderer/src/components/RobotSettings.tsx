@@ -115,7 +115,7 @@ export function RobotSettings() {
   };
   const size = (key: 'length' | 'width', text: string) => {
     const v = Number(text);
-    if (Number.isFinite(v) && v > 0.2 && v < 3) updateProfile(profile.id, { robot: { ...profile.robot, [key]: v } });
+    if (Number.isFinite(v) && v > 0.01) updateProfile(profile.id, { robot: { ...profile.robot, [key]: v } });
   };
 
   return (
