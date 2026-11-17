@@ -1,5 +1,23 @@
 # Brownout
 
+> [!IMPORTANT]
+> ## This project was written entirely by AI
+>
+> **Every line of code, every test, every script and every document in this repository was written by AI** (Claude, made by Anthropic), working from prompts. No person wrote or edited the code by hand. That includes the specs in `docs/`, which the AI researched and wrote.
+>
+> **The ideas behind it are human.** What Brownout is for and what it does came from its author, RoboticsIsEpik, who designed the app, decided every feature, tried each version, and reported what was wrong. Among them:
+>
+> - a log viewer built around **comparing matches**, even ones recorded at different times
+> - a **Power button** that breaks energy use down by subsystem and shows what was drawing current when the robot browned out
+> - **AprilTag and camera views** on the 2D field, showing which camera sees which tag and where each camera thinks the robot is
+> - **match video** synced to the timeline by hand
+> - a fully **customizable robot** drawing, with parts that move with logged angles
+> - **swerve, controller and command** viewers
+> - **real field pictures**, a **compact view** for small screens, and **custom icons instead of emoji**
+> - layouts as **presets**, a **"potato mode"** for slow laptops, and the rule that **only the timeline moves time**
+>
+> **What this means if you use it:** treat Brownout like any software you did not write and cannot fully vouch for. It has automated tests (45 unit tests and 181 checks that drive the real app) and has been checked against one real robot log, but AI-written code can have mistakes that tests miss. Before making a decision at an event, such as retiring a battery or blaming a mechanism for a brownout, check the conclusion against the raw data in the graphs.
+
 A desktop log viewer and **log comparison tool** for FRC robots. It opens WPILOG files (`.wpilog`) written by WPILib DataLogManager, Epilogue, AdvantageKit, DogLog and the 2027 FIRST Driver Station, and is built to look at **several logs at once**: matches from different days line up at auto start (or first enable, teleop start, wall clock, or by hand), and every panel can overlay, stack or difference them.
 
 Electron + TypeScript + React. Works fully offline. Windows, macOS and Linux.
