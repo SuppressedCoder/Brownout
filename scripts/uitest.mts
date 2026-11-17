@@ -361,6 +361,27 @@ async function main() {
   check('...and back to the match', !(await state<boolean>(page, 's.sessionStore.get().wholeLog')));
   await page.keyboard.press('m');
   await page.screenshot({ path: resolve(outDir, 'ui-timeline-match.png') });
+
+  console.log('Maximize a panel');
+  {
+    const g0 = await page.locator('.graph-panel canvas').first().boundingBox();
+    await page.locator('.graph-panel').first().hover();
+    await page.locator('.panel-frame:has(.graph-panel) [data-testid=panel-maximize]').first().click();
+    await page.waitForTimeout(400);
+    const g1 = await page.locator('.graph-panel canvas').first().boundingBox();
+    check(
+      'the maximize button lets a panel fill the grid',
+      !!g0 && !!g1 && g1.width > g0.width * 1.3 && g1.height > g0.height * 1.3,
+      JSON.stringify({ g0, g1 }),
+    );
+    check('...with the timeline still there', (await page.locator('[data-testid=timeline-canvas]').count()) === 1);
+    check('...and the preset is not marked as changed', !(await presetText(page)).includes('modified'), await presetText(page));
+    await page.screenshot({ path: resolve(outDir, 'ui-maximized.png') });
+    await page.keyboard.press('Control+Enter');
+    await page.waitForTimeout(400);
+    const g2 = await page.locator('.graph-panel canvas').first().boundingBox();
+    check('Ctrl+Enter puts it back', !!g0 && !!g2 && Math.abs(g2.width - g0.width) < 4, JSON.stringify({ g0, g2 }));
+  }
   const rz = await page.locator('.timeline-resizer').boundingBox();
   if (rz) {
     await page.mouse.move(rz.x + 300, rz.y + 3);
@@ -1058,6 +1079,44 @@ async function main() {
     'the chosen video loads through the app’s own address',
     (await page.locator('[data-testid=video]').getAttribute('src'))!.startsWith('brownout-media://video/'),
   );
+
+  console.log('Video sync view');
+  check('choosing a video opens the sync view', (await page.locator('[data-testid=video-sync-view]').count()) === 1);
+  await page.waitForFunction(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const v = (globalThis as any).document.querySelector('[data-testid=video-sync-video]');
+    return !!v && v.readyState >= 2;
+  });
+  const svt = () => page.evaluate(`document.querySelector('[data-testid=video-sync-video]').currentTime`) as Promise<number>;
+  check('the sync view offers the log’s auto start', (await page.locator('[data-testid=video-sync-marker-auto]').count()) === 1);
+  const cursorBeforeSync = await state<number | null>(page, 's.timeStore.get().cursor');
+  await page.locator('[data-testid=video-sync-scrub]').fill('3');
+  await page.waitForTimeout(300);
+  await page.locator('[data-testid=video-sync-pair]').focus();
+  for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowRight');
+  await page.waitForTimeout(400);
+  check('arrow keys step the video one frame at a time', Math.abs((await svt()) - (3 + 3 / 30)) < 0.02, String(await svt()));
+  check('...and leave the shared cursor alone', (await state<number | null>(page, 's.timeStore.get().cursor')) === cursorBeforeSync);
+  const drag = (await page.evaluate(
+    `(() => { const el = document.querySelector('[data-testid=video-sync-scrub]'); const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; const s = window.__brownout.seekStats; const r0 = s.requested, i0 = s.issued; for (let i = 0; i <= 60; i++) { set.call(el, String(4 + i * 0.1)); el.dispatchEvent(new Event('input', { bubbles: true })); } return { requested: s.requested - r0, issued: s.issued - i0 }; })()`,
+  )) as { requested: number; issued: number };
+  await page.waitForTimeout(800);
+  check(
+    'dragging the video runs one seek at a time and lands where the drag ended',
+    drag.issued < drag.requested / 4 && Math.abs((await svt()) - 10) < 0.05,
+    JSON.stringify({ ...drag, at: await svt() }),
+  );
+  await page.locator('[data-testid=video-sync-pair]').click();
+  check('pairing says what was paired', (await page.locator('[data-testid=video-sync-status]').innerText()).includes('Paired: video 0:10.00'));
+  await page.screenshot({ path: resolve(outDir, 'ui-video-sync.png') });
+  check('no emoji in the sync view', (await pictographs(page)) === '', await pictographs(page));
+  await page.locator('[data-testid=video-sync-cancel]').click();
+  check(
+    'Cancel closes the view without saving a sync',
+    (await page.locator('[data-testid=video-sync-view]').count()) === 0 &&
+      (await state<number | null>(page, `s.videoStore.get().byLog[s.sessionStore.get().logs[0].fileName].logMinusVideo`)) === null,
+  );
+
   const vt = () => page.evaluate(`document.querySelector('[data-testid=video]').currentTime`) as Promise<number>;
   await page.locator('[data-testid=video-scrub]').fill('2');
   await page.waitForTimeout(400);
@@ -1093,6 +1152,28 @@ async function main() {
   await page.waitForTimeout(300);
   check('...and pauses with it', (await page.evaluate(`document.querySelector('[data-testid=video]').paused`)) === true);
   await page.screenshot({ path: resolve(outDir, 'ui-video.png') });
+
+  // reopen the sync view from the menu: it starts from the saved sync; re-pair auto start with 0:01 and apply
+  await page.locator('[data-testid=video-sync]').click();
+  await page.locator('.menu .menu-item', { hasText: 'Open the sync view' }).click();
+  await page.waitForSelector('[data-testid=video-sync-view]');
+  await page.waitForTimeout(500);
+  check('the sync view starts from the saved sync', (await page.locator('[data-testid=video-sync-status]').innerText()).includes('Paired'));
+  await page.locator('[data-testid=video-sync-marker-auto]').click();
+  await page.locator('[data-testid=video-sync-scrub]').fill('1');
+  await page.waitForTimeout(300);
+  await page.locator('[data-testid=video-sync-pair]').click();
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(200);
+  const applied = await state<{ lmv: number; auto: number }>(
+    page,
+    `(() => { const l = s.sessionStore.get().logs[0]; return { lmv: s.videoStore.get().byLog[l.fileName].logMinusVideo, auto: l.robotState.autoStart }; })()`,
+  );
+  check(
+    'Apply saves "this frame is auto start"',
+    (await page.locator('[data-testid=video-sync-view]').count()) === 0 && Math.abs(applied.lmv - (applied.auto - 1)) < 0.02,
+    JSON.stringify(applied),
+  );
 
   console.log('Match report');
   const reportPath = resolve(outDir, 'ui-report.pdf');

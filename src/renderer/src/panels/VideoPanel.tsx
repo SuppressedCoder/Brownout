@@ -1,10 +1,14 @@
 /**
- * A match video next to the log. Pick a local file, then sync it by hand:
- * scrub the video to a moment you recognize (the robot's first move, the
- * horn) and say what that frame is: auto start, teleop start, or wherever
- * the cursor is. From then on the video follows the timeline, including
- * playback speed and scrubbing. One video per log; the file and the sync
- * are remembered for that log.
+ * A match video next to the log. Pick a local file, then sync it by hand,
+ * best in the sync view (components/VideoSync.tsx): find a moment you
+ * recognize (the robot's first move, the horn) and say what that frame is.
+ * The quick menu does the same for auto start, teleop start or the cursor.
+ * From then on the video follows the timeline, including playback speed and
+ * scrubbing. One video per log; the file and the sync are remembered for
+ * that log.
+ *
+ * Seeks go through chaseSeek (lib/videoSeek.ts): one at a time, straight to
+ * the newest target, so dragging doesn't freeze the picture.
  */
 import { useEffect, useRef, useState } from 'react';
 import { panelStore, updatePanel, type VideoSettings } from '../state/panels';
@@ -12,7 +16,8 @@ import { sessionStore, type LogEntry } from '../state/session';
 import { timeStore } from '../state/time';
 import { useStore } from '../state/store';
 import { videoStore, setVideo, setVideoUrl, setVideoSync, removeVideo } from '../state/videos';
-import { toast } from '../state/ui';
+import { toast, uiStore } from '../state/ui';
+import { chaseSeek, seekTarget } from '../lib/videoSeek';
 import { formatTime } from '@core/alignment';
 import { Toolbar, ToolButton, ToolSelect, ToolGroup, ToolSpacer } from '../components/Toolbar';
 import { MenuButton, MenuItem, MenuSeparator } from '../components/Menu';
@@ -40,6 +45,7 @@ export function VideoPanel({ id }: { id: string }) {
   const [duration, setDuration] = useState(0);
   const [videoT, setVideoT] = useState(0);
   const [note, setNote] = useState('');
+  const [videoPlaying, setVideoPlaying] = useState(false);
   const synced = !!entry && entry.logMinusVideo !== null;
 
   // Reopen a remembered video
@@ -85,13 +91,20 @@ export function VideoPanel({ id }: { id: string }) {
       setNote('');
       if (t.playing) {
         if (v.playbackRate !== t.speed) v.playbackRate = t.speed;
-        if (Math.abs(v.currentTime - target) > 0.3) v.currentTime = target;
+        // Re-seek only when clearly off, and not again while the last one is settling,
+        // or the video stalls in a loop of seeks while the timeline runs on.
+        const now = performance.now();
+        if (!v.seeking && Math.abs(v.currentTime - target) > 0.3 && now - lastHard > 1000) {
+          lastHard = now;
+          chaseSeek(v, target);
+        }
         if (v.paused) void v.play().catch(() => undefined);
       } else {
         if (!v.paused) v.pause();
-        if (Math.abs(v.currentTime - target) > 0.012) v.currentTime = target;
+        if (Math.abs(seekTarget(v) - target) > 0.012) chaseSeek(v, target);
       }
     };
+    let lastHard = 0;
     const unsubs = [timeStore.subscribe(follow), videoStore.subscribe(follow), sessionStore.subscribe(follow)];
     follow();
     return () => unsubs.forEach((u) => u());
@@ -101,17 +114,32 @@ export function VideoPanel({ id }: { id: string }) {
     if (!log) return;
     if (window.brownout) {
       const f = await window.brownout.pickVideo();
-      if (f) setVideo(log.fileName, { path: f.path, name: f.name, logMinusVideo: null }, f.url);
+      if (f) {
+        setVideo(log.fileName, { path: f.path, name: f.name, logMinusVideo: null }, f.url);
+        openSync();
+      }
     } else fileRef.current?.click();
   };
   const onFile = (file: File | undefined) => {
-    if (file && log) setVideo(log.fileName, { name: file.name, logMinusVideo: null }, URL.createObjectURL(file));
+    if (file && log) {
+      setVideo(log.fileName, { name: file.name, logMinusVideo: null }, URL.createObjectURL(file));
+      openSync();
+    }
   };
+  const openSync = () => log && uiStore.set({ videoSyncFor: log.id });
+  /** Move the unsynced video (pauses it). The readout follows at once, so a dragged slider never jumps back. */
   const seek = (t: number) => {
     const v = videoRef.current;
     if (!v) return;
     v.pause();
-    v.currentTime = Math.max(0, Math.min(Number.isFinite(v.duration) ? v.duration : t, t));
+    chaseSeek(v, t);
+    setVideoT(seekTarget(v));
+  };
+  const togglePlay = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.paused) void v.play().catch(() => undefined);
+    else v.pause();
   };
   const syncTo = (raw: number | undefined, what: string) => {
     const v = videoRef.current;
@@ -148,6 +176,12 @@ export function VideoPanel({ id }: { id: string }) {
             {(close) => (
               <>
                 <MenuItem
+                  label="Open the sync view"
+                  description="A large video with frame-by-frame controls next to this log's auto and teleop markers"
+                  onClick={() => (close(), openSync())}
+                />
+                <MenuSeparator />
+                <MenuItem
                   label="This frame is auto start"
                   description="The moment autonomous was enabled"
                   onClick={() => (close(), syncTo(log?.robotState.autoStart ?? log?.robotState.firstEnable, 'auto start'))}
@@ -175,9 +209,19 @@ export function VideoPanel({ id }: { id: string }) {
         )}
         {url && !synced && (
           <ToolButton
+            icon={videoPlaying ? 'pause' : 'play'}
+            text={videoPlaying ? 'Pause the video' : 'Play the video'}
+            onClick={togglePlay}
+            active={videoPlaying}
+            title="Play the video on its own, to find a moment you recognize"
+            testId="video-play"
+          />
+        )}
+        {url && !synced && (
+          <ToolButton
             icon="frameBack"
             text="Back one frame"
-            onClick={() => seek((videoRef.current?.currentTime ?? 0) - FRAME)}
+            onClick={() => videoRef.current && seek(seekTarget(videoRef.current) - FRAME)}
             title="Video back one frame (1/30 s)"
           />
         )}
@@ -185,7 +229,7 @@ export function VideoPanel({ id }: { id: string }) {
           <ToolButton
             icon="frameForward"
             text="Forward one frame"
-            onClick={() => seek((videoRef.current?.currentTime ?? 0) + FRAME)}
+            onClick={() => videoRef.current && seek(seekTarget(videoRef.current) + FRAME)}
             title="Video forward one frame (1/30 s)"
           />
         )}
@@ -246,8 +290,10 @@ export function VideoPanel({ id }: { id: string }) {
             preload="auto"
             data-testid="video"
             onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
-            onTimeUpdate={(e) => setVideoT(e.currentTarget.currentTime)}
-            onSeeked={(e) => setVideoT(e.currentTarget.currentTime)}
+            onTimeUpdate={(e) => setVideoT(seekTarget(e.currentTarget))}
+            onSeeked={(e) => setVideoT(seekTarget(e.currentTarget))}
+            onPlay={() => setVideoPlaying(true)}
+            onPause={() => setVideoPlaying(false)}
             onError={() =>
               toast(`This video cannot be played here (${entry.name}). MP4 with H.264 and WebM work; HEVC clips need converting.`, 'error', undefined, 9000)
             }

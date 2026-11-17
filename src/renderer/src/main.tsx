@@ -11,6 +11,7 @@ import { presetStore } from './state/presets';
 import { uiStore } from './state/ui';
 import { profileStore } from './state/profiles';
 import { videoStore } from './state/videos';
+import { seekStats } from './lib/videoSeek';
 
 // Handle for the UI test script and for poking at state from DevTools.
 (window as unknown as { __brownout: unknown }).__brownout = {
@@ -24,6 +25,8 @@ import { videoStore } from './state/videos';
   videoStore,
   /** The range the timeline covers right now (the match or the whole log). */
   timeBounds,
+  /** Video seeks asked for and actually issued (lib/videoSeek.ts). */
+  seekStats,
 };
 
 createRoot(document.getElementById('root')!).render(

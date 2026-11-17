@@ -152,6 +152,7 @@ function buildMenu() {
         { label: 'Zoom to auto', click: action('zoomAuto') },
         { label: 'Zoom to teleop', click: action('zoomTeleop') },
         { type: 'separator' },
+        { label: 'Maximize / restore the active panel', click: action('maximizePanel') },
         { label: 'Toggle sidebar', click: action('toggleSidebar') },
         { label: 'Cycle timeline height', click: action('cycleTimeline') },
         { label: 'Toggle Potato mode', click: action('potato') },

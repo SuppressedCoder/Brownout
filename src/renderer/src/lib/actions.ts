@@ -122,6 +122,7 @@ export const ACTIONS: Action[] = [
     run: () => sessionStore.set((s) => ({ sidebarOpen: !s.sidebarOpen })),
   },
   { id: 'cycleTimeline', label: 'Cycle timeline height', group: 'View', defaultKey: 'Ctrl+T', run: cycleTimeline },
+  { id: 'maximizePanel', label: 'Maximize / restore the active panel', group: 'View', defaultKey: 'Ctrl+Enter', run: () => grid.toggleMaximize() },
   { id: 'potato', label: 'Toggle Potato mode', group: 'View', defaultKey: 'Ctrl+Shift+P', run: togglePotato },
   { id: 'settings', label: 'Settings', group: 'View', defaultKey: 'Ctrl+,', run: () => openSettings() },
   { id: 'help', label: 'Shortcuts and tips', group: 'View', defaultKey: '?', run: () => uiStore.set((s) => ({ helpOpen: !s.helpOpen })) },

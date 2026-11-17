@@ -21,6 +21,7 @@ import { startPowerAnalysis } from './lib/power';
 import { startVisionAnalysis } from './lib/vision';
 import { CameraEditorModal } from './components/CameraEditor';
 import { RobotEditorModal } from './components/RobotEditor';
+import { VideoSyncModal } from './components/VideoSync';
 import { addCustomField } from './lib/fieldAssets';
 
 /** Below this window width the sidebar hides itself. */
@@ -159,6 +160,7 @@ export function App() {
       <SubsystemEditorModal />
       <CameraEditorModal />
       <RobotEditorModal />
+      <VideoSyncModal />
       <DialogHost />
       <ToastHost />
     </div>
