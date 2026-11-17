@@ -427,6 +427,38 @@ async function main() {
   check('...and back to the match', !(await state<boolean>(page, 's.sessionStore.get().wholeLog')));
   await page.keyboard.press('m');
   await page.screenshot({ path: resolve(outDir, 'ui-timeline-match.png') });
+  // during playback the view can be dragged away from the playhead and stays there
+  {
+    const [b0, b1] = await extent(page);
+    await page.evaluate(`window.__brownout.timeStore.set({ view: [${b0}, ${b0 + 20}], cursor: ${b0 + 5} })`);
+    await page.evaluate(`document.activeElement && document.activeElement.blur()`);
+    await page.keyboard.press('Space');
+    await page.waitForTimeout(300);
+    const vv = await view(page);
+    const boxMid = xOfT((vv[0] + vv[1]) / 2);
+    await page.mouse.move(boxMid, tl.y + 12);
+    await page.mouse.down();
+    await page.mouse.move(boxMid + 300, tl.y + 12, { steps: 6 });
+    await page.mouse.up();
+    const moved = await view(page);
+    await page.waitForTimeout(800);
+    const later = await view(page);
+    const cur = await state<number>(page, 's.timeStore.get().cursor');
+    check(
+      'while playing, the overview window can be dragged away from the playhead and stays there',
+      moved[0] > vv[0] + 10 && Math.abs(later[0] - moved[0]) < 1e-6 && cur < later[0],
+      JSON.stringify({ vv, moved, later, cur }),
+    );
+    await page.keyboard.press('Space');
+    await page.keyboard.press('Space');
+    await page.waitForTimeout(200);
+    const shown = await view(page);
+    const cur2 = await state<number>(page, 's.timeStore.get().cursor');
+    check('pressing play brings the playhead back into view', cur2 >= shown[0] && cur2 <= shown[1], JSON.stringify({ shown, cur2 }));
+    await page.keyboard.press('Space');
+    await page.screenshot({ path: resolve(outDir, 'ui-overview-playhead.png') });
+    await page.keyboard.press('m');
+  }
 
   console.log('Maximize a panel');
   {

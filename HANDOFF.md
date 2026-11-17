@@ -29,7 +29,7 @@ Written 2026-11-16 by the model that built the app so far, and last updated 2026
 3. `docs/implementation-status.md`: what is built, item by item, with honest notes on what is partial.
 4. The spec in `docs/` that matches your task (listed in `AGENTS.md`).
 
-State in one paragraph: the app works end to end, every planned feature from the last two plans is built, and v0.5.1 is released with installers for all three operating systems. `npm run check` (52 unit tests) and `npm run uitest` (241 checks) pass, in CI on GitHub (Linux) and on the owner's Windows 11 computer. **One real robot log has been checked:** CURIE Q89 from the 2026 Championship, a DataLogManager log with no AdvantageKit and no battery voltage. It exposed ten real bugs, all fixed in v0.5.1; section 6 lists them. Everything that needs battery voltage or PDH currents has still only been run on the synthetic demo logs. Getting more real logs is the first job (section 7).
+State in one paragraph: the app works end to end, every planned feature from the last two plans is built, and v0.5.1 is released with installers for all three operating systems. `npm run check` (52 unit tests) and `npm run uitest` (252 checks) pass, in CI on GitHub (Linux) and on the owner's Windows 11 computer. **One real robot log has been checked:** CURIE Q89 from the 2026 Championship, a DataLogManager log with no AdvantageKit and no battery voltage. It exposed ten real bugs, all fixed in v0.5.1; section 6 lists them. Everything that needs battery voltage or PDH currents has still only been run on the synthetic demo logs. Getting more real logs is the first job (section 7).
 
 Work on a branch and open a pull request; don't push to `main` unless the owner asks.
 
@@ -148,7 +148,7 @@ $$t_{\text{aligned}} = t_{\text{raw}} + \text{offset}$$
 
 Panels draw in aligned time. Aligned times are never stored in data. Changing the alignment mode only changes offsets.
 
-The timeline covers the **match** by default: `timeBounds()` in `state/time.ts` is `matchExtent()` from `state/session.ts` (earliest auto start, else first enable, to the latest teleop end, else last disable, 2 s padding) unless `sessionStore.wholeLog` is on, and `sessionExtent()` (all of every log) otherwise. The view, playback and the overview use `timeBounds()`; `setCursor` switches to the whole log by itself when a jump lands outside the match.
+The timeline covers the **match** by default: `timeBounds()` in `state/time.ts` is `matchExtent()` from `state/session.ts` (earliest auto start, else first enable, to the latest teleop end, else last disable, 2 s padding) unless `sessionStore.wholeLog` is on, and `sessionExtent()` (all of every log) otherwise. During playback the view follows the playhead only when the playhead runs off the view's edge (`tick()`); the owner found the old rule (pull the view back whenever the playhead was outside it) made the overview window snap back when dragged. The view, playback and the overview use `timeBounds()`; `setCursor` switches to the whole log by itself when a jump lands outside the match.
 
 Only the timeline moves shared time (cursor, visible range, playback). Panels may offer an explicit "jump to this moment" click and nothing more, unless the user turns on the setting that lets graphs and the field move time. The owner asked for this explicitly.
 
