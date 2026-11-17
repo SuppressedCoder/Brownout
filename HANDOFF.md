@@ -1,21 +1,26 @@
 # Brownout handoff
 
-Written 2026-11-16 by the model that built the app so far, and last updated 2026-11-17 after **v0.5.1 was published**. It is for the model that continues the work, and assumes no memory of the conversations behind it.
+Written 2026-11-16 by the model that built the app so far, and last updated 2026-11-17, after **v0.5.1 was published** and the work moved into the repo on the owner's computer. It is for the model that continues the work, and assumes no memory of the conversations behind it.
 
-**Where the code is.** On GitHub: **https://github.com/SuppressedCoder/Brownout**. Work from `main`; it holds everything. Pull requests #1 to #4 are merged:
+**Where the code is.** On GitHub: **https://github.com/SuppressedCoder/Brownout**. Work from `main`; it holds everything. Pull requests #1 to #5 are merged:
 - #1 added the app in 12 step-by-step commits
 - #2 added the AI disclaimer at the top of the README
 - #3 added the release workflow
 - #4 made releases startable from the Actions tab
+- #5 updated this handoff after the v0.5.1 release
 
-**Brownout 0.5.1 is published** as a pre-release with Windows, macOS and Linux installers: https://github.com/SuppressedCoder/Brownout/releases/tag/v0.5.1. The owner also has an older `brownout.zip` of the same code; GitHub is the source of truth now. The Claude Project named "Brownout" holds only documents: this handoff, the status and plan, the log format reference, and the specs. Do not rebuild the app from the documents.
+**Brownout 0.5.1 is published** as a pre-release with Windows, macOS and Linux installers: https://github.com/SuppressedCoder/Brownout/releases/tag/v0.5.1. The owner also has an older `brownout.zip` of the same code; GitHub is the source of truth now.
 
-**Getting the code in a new session:** attach the repo with push access (`add_repo`, owner `SuppressedCoder`, repo `Brownout`), clone it, run `npm install` and `npm run make-demo`. The owner's real log is not in the repo; ask for it if you need it (section 2).
+**Where the work happens now.** The owner and the model work in the cloned repo on the owner's own computer, in **VS Code with Claude Code**. A local session usually starts with the clone already open: run `npm install` and `npm run make-demo` and you are ready. A cloud session (claude.ai) instead attaches the repo with push access (`add_repo`, owner `SuppressedCoder`, repo `Brownout`) and clones it. Either way, the owner's real log is not in the repo; ask for it if you need it (section 2).
 
-**What a Claude session can and cannot do on GitHub** (the Claude GitHub App is installed on the SuppressedCoder account):
-- **Can:** push branches, and open pull requests through the REST API (`gh api repos/SuppressedCoder/Brownout/pulls --method POST --input body.json`). `gh pr create` fails because the GraphQL API is not available here. Reading anything works.
-- **Cannot:** create tags (`git push` of a tag is cut off, and the API answers "Write access to this GitHub API path is not permitted through this proxy"), or delete branches (`git push --delete` is cut off). Don't look for other ways around these limits. The owner deletes branches in the browser; releases are started with the Actions button (section 10).
-- **Leave merging to the owner.** They merge pull requests themselves; tell them which merge method to use when it matters.
+**This file in the repo is the main copy.** Edit `HANDOFF.md` here; the copy in the Claude Project named "Brownout" is synced afterwards, by hand, from a claude.ai chat. Never update only the Project copy, and when the two disagree the repo wins. The Claude Project holds only documents: this handoff, the status and plan, the log format reference, and the specs. Do not rebuild the app from the documents.
+
+**What a Claude session can and cannot do on GitHub** (the Claude GitHub App is installed on the SuppressedCoder account). What you can do depends on where the session runs:
+- **A local session** (VS Code with Claude Code) uses the owner's own git and `gh` credentials, so everything works: push branches, **push tags**, **delete branches** (`git push origin --delete <branch>`), and open pull requests with `gh pr create`. The limits in the next bullet do not apply to it.
+- **A cloud session** works through the git proxy and is narrower:
+  - **Can:** push branches, and open pull requests through the REST API (`gh api repos/SuppressedCoder/Brownout/pulls --method POST --input body.json`). `gh pr create` fails there because the GraphQL API is not available. Reading anything works.
+  - **Cannot:** create tags (`git push` of a tag is cut off, and the API answers "Write access to this GitHub API path is not permitted through this proxy"), or delete branches (`git push --delete` is cut off). Don't look for other ways around these limits. The owner deletes branches in the browser; releases are started with the Actions button (section 10).
+- **Leave merging to the owner,** wherever the session runs. They merge pull requests themselves; tell them which merge method to use when it matters.
 
 ## 0. Read this first
 
@@ -28,7 +33,7 @@ State in one paragraph: the app works end to end, every planned feature from the
 
 Work on a branch and open a pull request; don't push to `main` unless the owner asks.
 
-**One conversation per big task.** The owner was told to start a new conversation for each major piece of work (a feature, a batch of fixes from a real log), because very long conversations get compressed and details are lost. So you may be starting cold on a narrow task: this file and `AGENTS.md` are your memory. Before you finish a task, update this file (sections 6 to 8 at least) and its copy in the Claude Project, so the next conversation starts from the truth.
+**One conversation per big task.** The owner was told to start a new conversation for each major piece of work (a feature, a batch of fixes from a real log), because very long conversations get compressed and details are lost. So you may be starting cold on a narrow task: this file and `AGENTS.md` are your memory. Before you finish a task, update this file (sections 6 to 8 at least) so the next conversation starts from the truth; the Claude Project copy is synced from it afterwards.
 
 ## 1. What Brownout is
 
@@ -368,7 +373,7 @@ Each of these is a self-contained feature. Follow the matching recipe in `AGENTS
 - **`npm install` reports six moderate vulnerabilities and some deprecation warnings.** They come from development dependencies; which packages was not investigated. Do not run `npm audit fix --force`: it upgrades across major versions and breaks the build.
 - **Electron 45 specifics:** there is no `clipboard.writeImage`; `lib/capture.ts` uses `clipboard.write([new ClipboardItem(...)])`. H.264 playback relies on the codecs Electron ships.
 - **Running the Release workflow twice at once** (a double tap on "Run workflow") makes one run release and the other fail with "Tag v… already exists". That failure is the guard working and changes nothing; it happened once for v0.5.1.
-- **"Automatically delete head branches" is off** in the repo settings, so merged branches stay until the owner deletes them. Suggest turning it on if branches pile up.
+- **"Automatically delete head branches" is off** in the repo settings, so merged branches stay until someone deletes them: the owner in the browser, or a local session with `git push origin --delete <branch>`. Suggest turning it on if branches pile up.
 - **The README's AI disclaimer quotes test counts** (45 unit tests, 181 UI checks) and lists the owner's main ideas. Keep both true when they change (section 10).
 - **"Error: Electron uninstall"** on first run means the Electron binary did not download. `scripts/ensure-electron.mjs` handles it; behind a proxy, set `ELECTRON_MIRROR`. The owner hit this once.
 
@@ -377,7 +382,8 @@ Each of these is a self-contained feature. Follow the matching recipe in `AGENTS
 - The owner (RoboticsIsEpik on the license and commits, `SuppressedCoder` on GitHub) is building this for their FRC team. They steer by trying the app and sending screenshots, usually with a short note. Read the screenshots closely: which button is lit, which panel is empty. Their v0.4 report ("some of the categories don't work") turned out to be every toolbar menu being invisible.
 - They often want an **outline first** ("do not edit anything yet"), then say "do it". When they ask for an outline, do not touch code.
 - **They are often on their phone.** They cannot run a terminal there. Do the git and GitHub steps yourself, and give them steps they can do in a phone's browser: merging pull requests, deleting branches, running the Release workflow, editing and publishing releases. The GitHub app does not cover all of these; say "in your phone's browser" and mention switching to the desktop site if a button is missing.
-- They get the code from GitHub now. Send a zip only if they ask (section 10 has the command).
+- They get the code from GitHub now, and they have a clone on their computer which they open in VS Code with Claude Code. Send a zip only if they ask (section 10 has the command).
+- **In a local session the terminal is theirs, not a sandbox.** What you run touches their real checkout, and a push uses their own credentials. Branch, commit and open the pull request yourself; still leave merging and publishing to them.
 - They prefer math written in LaTeX in replies.
 - Standing rules from them: no emoji, custom icons only; only the timeline moves time; it must stay usable on small screens; vision and everything else must be general, never tied to one team's field names.
 - They asked for the large disclaimer at the top of the README saying the project is written entirely by AI from their ideas. Keep it, and keep it accurate.
@@ -391,14 +397,14 @@ Each of these is a self-contained feature. Follow the matching recipe in `AGENTS
 2. `npm run check`, `npm run uitest`, `npm run smoke`, `npm run bench`, `npm run web:build`, and `npm run reallog` when there are logs in `fixtures/local/`
 3. Open every new or changed screenshot in `smoke/`, including `real-*.png` and `real-report.pdf`.
 4. Update `README.md` (including the test counts and feature list in the AI disclaimer at the top), `AGENTS.md` if a rule changed, `docs/implementation-status.md`, and this file (sections 6 to 8).
-5. The Claude Project holds copies of the docs under `claude/` (`brownout-implementation-status.md`, `brownout-next-version-plan.md`, `HANDOFF.md`, and the five specs). Update the copy whenever the file in `docs/` changes.
+5. The Claude Project holds copies of the docs under `claude/` (`brownout-implementation-status.md`, `brownout-next-version-plan.md`, `HANDOFF.md`, and the five specs). The files in the repo are the main copies; the Project copies are synced afterwards from a claude.ai chat. Change the repo file first, then tell the owner which Project copies need re-uploading.
 6. Bump `version` in `package.json` and in the first two `version` fields of `package-lock.json`. Do not search-and-replace version strings in the lockfile: dependency versions can collide with the app's. The version is chosen by hand, following semantic versioning as explained to the owner:
    - PATCH (0.5.1 → 0.5.2) for fixes only
    - MINOR (0.5 → 0.6) for new features
    - MAJOR stays 0 until the owner decides it is ready, a sensible point being after it has been installed on Windows and Macs and used at an event
    - a dash (`0.6.0-beta.1`) for test builds, which the workflow publishes as pre-releases
 7. Commit on a branch, push, and open a pull request; CI must pass.
-8. **To publish a release:** after the version bump is merged, either run the **Release** workflow on `main` from the Actions tab with "Make a draft release" ticked (the workflow creates the tag `v<version>` itself), or push a tag (`git tag v0.5.1 && git push origin v0.5.1`). A version with a dash such as `0.6.0-beta.1` makes a pre-release. `.github/workflows/release.yml` builds the installers on Windows, macOS and Linux and creates a **draft** release with them attached; if a release for the tag already exists, it adds the installers to it. The owner reviews and publishes it. Only start a release when the owner asks. **A Claude session cannot create tags** (the git proxy and the GitHub API both refuse; branches and pull requests work), so from a session the owner starts it with the Actions button, or you trigger it with `gh api repos/SuppressedCoder/Brownout/actions/workflows/release.yml/dispatches --method POST -f ref=main -F 'inputs[release]=true'` if that endpoint is allowed. The same workflow test-builds the installers on any pull request that touches packaging (`electron-builder.yml`, `package.json`, `build/`, the workflow).
+8. **To publish a release:** after the version bump is merged, either run the **Release** workflow on `main` from the Actions tab with "Make a draft release" ticked (the workflow creates the tag `v<version>` itself), or push a tag (`git tag v0.5.1 && git push origin v0.5.1`). A version with a dash such as `0.6.0-beta.1` makes a pre-release. `.github/workflows/release.yml` builds the installers on Windows, macOS and Linux and creates a **draft** release with them attached; if a release for the tag already exists, it adds the installers to it. The owner reviews and publishes it. Only start a release when the owner asks. **A cloud session cannot create tags** (the git proxy and the GitHub API both refuse; branches and pull requests work), so from one the owner starts the release with the Actions button, or you trigger it with `gh api repos/SuppressedCoder/Brownout/actions/workflows/release.yml/dispatches --method POST -f ref=main -F 'inputs[release]=true'` if that endpoint is allowed. **A local session can push the tag itself** (`git tag v0.5.2 && git push origin v0.5.2`), which starts the same workflow. The same workflow test-builds the installers on any pull request that touches packaging (`electron-builder.yml`, `package.json`, `build/`, the workflow).
 9. Releases so far: **v0.5.1** (2026-11-17, pre-release, started from the Actions tab by the owner).
 10. If the owner also wants a zip, build it from the parent folder:
 
