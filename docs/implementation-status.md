@@ -44,7 +44,7 @@ What the app in this repository does today, mapped to the specs. ✓ built · �
 | Visible range clamped to the timeline's range (overview window can't leave the strip) | ✓ | `clampWindow` in core |
 | Go-to-time box, zoom −/+ with a typed span, quick spans and phases | ✓ | |
 | Only the timeline moves shared time; hover ignored during playback | ✓ | setting "Let graphs and the field move time" restores graph click/pan/zoom |
-| Playback (speed, loop over selection), step, phase jump | ✓ | |
+| Playback (speed, loop over selection), step, phase jump; the view follows the playhead only when it runs off the view's edge, so a view moved by hand during playback stays put (pressing play brings the playhead into view once); the overview strip shows the playhead as a solid line with a tab | ✓ | |
 | Time formats: aligned, match time, raw, wall clock | ✓ | match time derived from phases (logged `MatchTime` not yet preferred) |
 | Line graph: left/right axes, discrete lanes, thresholds, legend with values, Δ readout, overlay / stacked / difference, per-panel source, own time range when unlinked | ✓ | derived expressions ✗ (built-in derived fields: path errors, pose speed, electrical power) |
 | Graph value-axis zoom independent of time: wheel, axis drag, typed limits, auto-fit | ✓ | |
@@ -79,7 +79,7 @@ What the app in this repository does today, mapped to the specs. ✓ built · �
 | In-app dialogs and toasts (no `prompt()`), generated shortcut sheet | ✓ | |
 | CSV export (selection or visible range) | ✓ | SVG export ✗ |
 | Browser build (`npm run web`) | ✓ | |
-| UI test driving the real app (`npm run uitest`, 241 checks) | ✓ | passes on Linux (CI) and on Windows 11 |
+| UI test driving the real app (`npm run uitest`, 252 checks) | ✓ | passes on Linux (CI) and on Windows 11 |
 | Real-log check (`npm run reallog`): opens logs from `fixtures/local/`, sets up suggested subsystems, applies every preset, captures the camera view and the match report, writes a summary | ✓ | it checks nothing by itself; read `smoke/real-summary.json` and the screenshots |
 | Mechanism (side view), XY plot, 3D field | ✗ | |
 | Robot FTP download, DS folder watching, library | ✗ | P1 |

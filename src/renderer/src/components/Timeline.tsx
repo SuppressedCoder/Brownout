@@ -738,13 +738,29 @@ function drawTimeline(dc: DrawContext, layoutRef: React.MutableRefObject<Layout>
   ctx.fillRect(x0, 0, g.xa - x0, OVERVIEW_H);
   ctx.fillRect(g.xb, 0, x1 - g.xb, OVERVIEW_H);
   ctx.restore();
-  if (time.cursor !== null) drawCursor(ctx, xOv(time.cursor), 0, OVERVIEW_H, pal.hoverCursor);
   const boxHot = ui.ovHover === 'box' || ui.drag === 'ov-move';
   ctx.strokeStyle = boxHot ? pal.accent : pal.cursor;
   ctx.lineWidth = boxHot ? 2 : 1.5;
   ctx.strokeRect(g.xa + 0.75, 0.75, g.xb - g.xa - 1.5, OVERVIEW_H - 1.5);
   drawGrip(ctx, g.left[0], ui.ovHover === 'left' || ui.drag === 'ov-left' || ui.drag === 'ov-move', pal);
   drawGrip(ctx, g.right[0], ui.ovHover === 'right' || ui.drag === 'ov-right' || ui.drag === 'ov-move', pal);
+  // where the playhead is in the whole range: a solid line with a tab, outlined so it shows on any band
+  if (time.cursor !== null) {
+    const cx = Math.round(xOv(time.cursor)) + 0.5;
+    ctx.fillStyle = pal.bg;
+    ctx.fillRect(cx - 2.5, 0, 5, OVERVIEW_H);
+    ctx.fillStyle = pal.cursor;
+    ctx.fillRect(cx - 1, 0, 2, OVERVIEW_H);
+    ctx.beginPath();
+    ctx.moveTo(cx - 5, 0);
+    ctx.lineTo(cx + 5, 0);
+    ctx.lineTo(cx, 6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = pal.bg;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
   ctx.restore();
 
   // Rows

@@ -224,8 +224,11 @@ function tick(ts: number) {
     }
   }
   const patch: Partial<TimeState> = { cursor: cur };
-  // keep the playhead in view by paging the view forward
-  if (cur > t.view[1] || cur < t.view[0]) {
+  // Follow the playhead when it runs off the view (page forward, or back after a loop). A view moved
+  // elsewhere by hand stays where it was put: the playhead was not in it, so nothing is followed.
+  const prev = t.cursor ?? t.view[0];
+  const wasIn = prev >= t.view[0] - 1e-9 && prev <= t.view[1] + 1e-9;
+  if (wasIn && (cur > t.view[1] || cur < t.view[0])) {
     const span = t.view[1] - t.view[0];
     const v = clampWindow(cur - span * 0.1, cur + span * 0.9, e0, e1, 'pan', MIN_SPAN);
     if (v) patch.view = v;
@@ -242,6 +245,13 @@ export function setPlaying(playing: boolean): void {
     // restart from the beginning when play is pressed at the very end
     const cursor = t.cursor === null ? t.view[0] : t.cursor >= e1 - 1e-6 ? e0 : t.cursor;
     timeStore.set({ playing: true, hover: null, cursor });
+    // pressing play shows the playhead once; after that the view only follows it off the edge
+    const [a, b] = t.view;
+    if (cursor < a || cursor > b) {
+      const span = b - a;
+      const v = clampWindow(cursor - span * 0.1, cursor + span * 0.9, e0, e1, 'pan', MIN_SPAN);
+      if (v) timeStore.set({ view: v });
+    }
     lastTs = 0;
     rafId = requestAnimationFrame(tick);
   } else {
