@@ -1,0 +1,57 @@
+{
+  "name": "brownout",
+  "version": "0.5.1",
+  "description": "FRC WPILOG viewer and log comparison tool",
+  "main": "./out/main/index.js",
+  "private": true,
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.core.json && tsc --noEmit -p tsconfig.node.json",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm run test",
+    "make-demo": "tsx scripts/make-demo.mts",
+    "dist": "electron-vite build && electron-builder",
+    "web": "vite --config vite.web.config.mts",
+    "web:build": "vite build --config vite.web.config.mts",
+    "smoke": "tsx scripts/smoke.mts",
+    "bench": "tsx scripts/bench.mts",
+    "postinstall": "node scripts/ensure-electron.mjs",
+    "predev": "node scripts/ensure-electron.mjs",
+    "prestart": "node scripts/ensure-electron.mjs",
+    "presmoke": "node scripts/ensure-electron.mjs",
+    "uitest": "tsx scripts/uitest.mts",
+    "preuitest": "node scripts/ensure-electron.mjs",
+    "reallog": "tsx scripts/reallog.mts",
+    "prereallog": "node scripts/ensure-electron.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "electron": "^45.3.2",
+    "electron-builder": "^26.18.0",
+    "electron-vite": "^6.0.0",
+    "playwright-core": "^1.65.1",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0"
+  },
+  "dependencies": {
+    "dockview": "^8.9.0",
+    "dockview-react": "^8.9.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "author": "Brownout contributors",
+  "license": "MIT",
+  "homepage": "https://github.com/SuppressedCoder/Brownout",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SuppressedCoder/Brownout.git"
+  }
+}
