@@ -49,6 +49,17 @@ Other commands:
 
 ## Build a real app (installer / standalone .exe)
 
+**Releases are built by GitHub.** Bump `version` in `package.json`, merge, then tag and push:
+
+```bash
+git tag v0.5.1
+git push origin v0.5.1
+```
+
+`.github/workflows/release.yml` builds the installers on Windows, macOS and Linux and creates a **draft release** with them attached. Open the repo's Releases page, check the draft, and click Publish. A tag with a dash (`v0.6.0-beta.1`) becomes a pre-release. The build stops if the tag doesn't match the version in `package.json`. The same workflow builds (without releasing) on any pull request that changes the packaging setup, and from the Actions tab with "Run workflow".
+
+To build on your own computer instead:
+
 ```bash
 npm run make-demo   # so Settings → Demo logs works in the packaged app
 npm run dist        # builds, then packages for the OS you're on
@@ -58,16 +69,17 @@ Output lands in `dist/`:
 
 | OS | What you get |
 |---|---|
-| Windows | `Brownout Setup 0.5.1.exe` (installer: Start-menu + desktop shortcut, `.wpilog` file association) and `Brownout-0.5.1-portable.exe` (single file, no install). `dist/win-unpacked/Brownout.exe` also runs directly. |
-| macOS | `Brownout-0.5.1.dmg` and a zip. Unsigned: right-click → Open the first time. |
-| Linux | `Brownout-0.5.1.AppImage` (`chmod +x`, run) and a `.deb`. |
+| Windows | `Brownout-Setup-0.5.1.exe` (installer: Start-menu + desktop shortcut, `.wpilog` file association) and `Brownout-0.5.1-portable.exe` (single file, no install). `dist/win-unpacked/Brownout.exe` also runs directly. |
+| macOS | `Brownout-0.5.1-arm64.dmg` (Apple silicon) and `Brownout-0.5.1-x64.dmg` (Intel), plus zips. Unsigned: right-click → Open the first time; if macOS says the app is damaged, run `xattr -cr /Applications/Brownout.app`. |
+| Linux | `Brownout-0.5.1.AppImage` (`chmod +x`, run) and `brownout_0.5.1_amd64.deb`. |
 
 Notes:
-- Build on the OS you want to ship for (Windows builds on Windows, etc.).
+- Build on the OS you want to ship for (Windows builds on Windows, etc.); the release workflow does all three.
 - The builds are **unsigned**, so Windows SmartScreen shows "unrecognized app" → *More info → Run anyway*. Code signing needs a certificate (see `docs/brownout-tech-stack.md` §6).
 - On Windows, if electron-builder fails with *"Cannot create symbolic link"* while extracting `winCodeSign`, run the terminal once as Administrator (or turn on Windows *Developer Mode*) and rerun `npm run dist`.
 - A quick unpacked build for testing: `npx electron-builder --dir`.
 - Command-line flags work on the packaged app too: `Brownout.exe --open a.wpilog --open b.wpilog --preset compare`, `Brownout.exe --demo`.
+- On a machine without a GPU (CI, some virtual machines), set `BROWNOUT_DISABLE_GPU=1`.
 
 ## What's in it
 

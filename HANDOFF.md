@@ -76,7 +76,7 @@ npm run dev            # the app, with hot reload
 | `npm run bench` | reader speed against the budget of 3 s per 100 MB, on the demo logs and every log in `fixtures/local/` | after touching `src/core` reading or analysis |
 | `npm run reallog` | opens every log in `fixtures/local/` in the real app, sets up suggested subsystems, applies each preset, captures the camera view and the match report; writes `smoke/real-*.png`, `real-report.pdf`, `real-summary.json` | after any change, when real logs are available; read the summary and look at every picture |
 | `npm run web` / `web:build` | the UI in a plain browser, no Electron | after touching anything that calls `window.brownout` |
-| `npm run dist` | installers through electron-builder | untested for v0.5, see section 6 |
+| `npm run dist` | installers for the OS you're on, through electron-builder | releases are built by GitHub instead (section 10) |
 
 Things to know about the tests:
 
@@ -239,7 +239,7 @@ New decisions go in the decisions log at the top of `docs/frc-logging-landscape-
 | Match report | one demo log and CURIE Q89, rendered and looked at; one page each | a log with many brownouts or long error text |
 | Performance | `bench`: demo logs about 1 to 1.7 s per 100 MB; CURIE Q89 (71.5 MB) indexed in 0.23 s and opened in the app in about 1 s | a slow laptop; several large logs at once |
 | Platforms | Linux under xvfb only | Windows and macOS, in any form |
-| Installers | an unpacked Linux build exists in `dist/` from an earlier round | nothing was packaged or installed for v0.5; Windows and macOS installers have never been built |
+| Installers | built by the release workflow on GitHub for Windows (installer + portable), macOS (Apple silicon + Intel DMGs) and Linux (AppImage + .deb), all unsigned; the packaged Linux app was launched and opened the demo logs | no installer has been installed or run on Windows or macOS |
 
 ### What the first real log found (all fixed in v0.5.1)
 
@@ -285,7 +285,7 @@ For each log:
 **4. Run it on the owner's operating system.** Their OS is not confirmed. Everything was tested on Linux.
 - Ask what they use. Have them run `npm run dev` and try: open a log, each panel, a real video, the match report, copy panel as image.
 - Likely trouble spots: file paths in the video protocol (`registerVideo` and the `protocol.handle` in `src/main/index.ts`), the clipboard, PDF page size.
-- Then `npm run dist` on that machine and install the result. See `README.md` for the Windows symlink note.
+- Then have them install the build from the release (section 10) and try the same things. Windows and macOS installers build on GitHub but have never been installed and run on a real machine.
 
 ### P1: next
 
@@ -373,7 +373,9 @@ Each of these is a self-contained feature. Follow the matching recipe in `AGENTS
 4. Update `README.md`, `AGENTS.md` if a rule changed, `docs/implementation-status.md`, and this file (sections 6 to 8).
 5. The Claude Project holds copies of the docs under `claude/` (`brownout-implementation-status.md`, `brownout-next-version-plan.md`, `HANDOFF.md`, and the five specs). Update the copy whenever the file in `docs/` changes.
 6. Bump `version` in `package.json` and in the first two `version` fields of `package-lock.json`. Do not search-and-replace version strings in the lockfile: dependency versions can collide with the app's.
-7. Commit on a branch, push, and open a pull request; CI must pass. If the owner also wants a zip, build it from the parent folder:
+7. Commit on a branch, push, and open a pull request; CI must pass.
+8. **To publish a release:** after the version bump is merged, tag `main` and push the tag (`git tag v0.5.1 && git push origin v0.5.1`; a dash such as `v0.6.0-beta.1` makes a pre-release). `.github/workflows/release.yml` checks the tag against `package.json`, builds the installers on Windows, macOS and Linux, and creates a **draft** release with them attached. The owner reviews and publishes it. Only push a tag when the owner asks for a release. The same workflow test-builds the installers on any pull request that touches packaging (`electron-builder.yml`, `package.json`, `build/`, the workflow).
+9. If the owner also wants a zip, build it from the parent folder:
 
 ```bash
 zip -qr brownout.zip brownout -x "brownout/node_modules/*" "brownout/out/*" "brownout/dist/*" \

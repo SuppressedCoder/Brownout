@@ -75,7 +75,7 @@ What the app in this repository does today, mapped to the specs. ✓ built · �
 | Real-log check (`npm run reallog`): opens logs from `fixtures/local/`, sets up suggested subsystems, applies every preset, captures the camera view and the match report, writes a summary | ✓ | it checks nothing by itself; read `smoke/real-summary.json` and the screenshots |
 | Mechanism (side view), XY plot, 3D field | ✗ | |
 | Robot FTP download, DS folder watching, library | ✗ | P1 |
-| Installers, signing, auto-update | ◐ | electron-builder builds unsigned installers; no signing or auto-update |
+| Installers, signing, auto-update | ◐ | a release workflow builds unsigned installers on GitHub for Windows, macOS (Apple silicon and Intel) and Linux and attaches them to a draft release when a version tag is pushed; never installed on Windows or macOS yet; no signing or auto-update |
 
 ## Checked against a real robot log
 
