@@ -1,10 +1,21 @@
 # Brownout handoff
 
-Written 2026-11-16 at v0.5.0 and updated for v0.5.1 (checked against the first real robot log) by the model that built the app so far, for the model that continues it. It assumes no memory of the conversations behind it.
+Written 2026-11-16 by the model that built the app so far, and last updated 2026-11-17 after **v0.5.1 was published**. It is for the model that continues the work, and assumes no memory of the conversations behind it.
 
-**Where the code is.** On GitHub: **https://github.com/SuppressedCoder/Brownout**. The app was added on the branch `brownout-v0.5.1` in 12 step-by-step commits, plus one CI fix, as pull request #1 into `main`. Check whether #1 has been merged before you start; if it has, work from `main`. The owner also holds a `brownout.zip` of the same code. The Claude Project named "Brownout" holds only documents: this handoff, the status and plan, and five specs. Do not rebuild the app from the documents.
+**Where the code is.** On GitHub: **https://github.com/SuppressedCoder/Brownout**. Work from `main`; it holds everything. Pull requests #1 to #4 are merged:
+- #1 added the app in 12 step-by-step commits
+- #2 added the AI disclaimer at the top of the README
+- #3 added the release workflow
+- #4 made releases startable from the Actions tab
 
-To push from a Claude session, the session needs the repo attached with push access, and the Claude GitHub App installed on the SuppressedCoder account (it is, as of 2026-11-16). GitHub's GraphQL API is not available from these sessions, so `gh pr create` fails; open pull requests with `gh api repos/SuppressedCoder/Brownout/pulls --method POST`.
+**Brownout 0.5.1 is published** as a pre-release with Windows, macOS and Linux installers: https://github.com/SuppressedCoder/Brownout/releases/tag/v0.5.1. The owner also has an older `brownout.zip` of the same code; GitHub is the source of truth now. The Claude Project named "Brownout" holds only documents: this handoff, the status and plan, the log format reference, and the specs. Do not rebuild the app from the documents.
+
+**Getting the code in a new session:** attach the repo with push access (`add_repo`, owner `SuppressedCoder`, repo `Brownout`), clone it, run `npm install` and `npm run make-demo`. The owner's real log is not in the repo; ask for it if you need it (section 2).
+
+**What a Claude session can and cannot do on GitHub** (the Claude GitHub App is installed on the SuppressedCoder account):
+- **Can:** push branches, and open pull requests through the REST API (`gh api repos/SuppressedCoder/Brownout/pulls --method POST --input body.json`). `gh pr create` fails because the GraphQL API is not available here. Reading anything works.
+- **Cannot:** create tags (`git push` of a tag is cut off, and the API answers "Write access to this GitHub API path is not permitted through this proxy"), or delete branches (`git push --delete` is cut off). Don't look for other ways around these limits. The owner deletes branches in the browser; releases are started with the Actions button (section 10).
+- **Leave merging to the owner.** They merge pull requests themselves; tell them which merge method to use when it matters.
 
 ## 0. Read this first
 
@@ -13,9 +24,11 @@ To push from a Claude session, the session needs the repo attached with push acc
 3. `docs/implementation-status.md`: what is built, item by item, with honest notes on what is partial.
 4. The spec in `docs/` that matches your task (listed in `AGENTS.md`).
 
-State in one paragraph: the app works end to end and every planned feature from the last two plans is built. `npm run check` (45 unit tests) and `npm run uitest` (181 checks) pass. **One real robot log has been checked:** CURIE Q89 from the 2026 Championship, a DataLogManager log with no AdvantageKit and no battery voltage. It exposed ten real bugs, all fixed in v0.5.1; section 6 lists them. Everything that needs battery voltage or PDH currents has still only been run on the synthetic demo logs. Getting more real logs is the first job (section 7).
+State in one paragraph: the app works end to end, every planned feature from the last two plans is built, and v0.5.1 is released with installers for all three operating systems. `npm run check` (45 unit tests) and `npm run uitest` (181 checks) pass, locally and in CI on GitHub. **One real robot log has been checked:** CURIE Q89 from the 2026 Championship, a DataLogManager log with no AdvantageKit and no battery voltage. It exposed ten real bugs, all fixed in v0.5.1; section 6 lists them. Everything that needs battery voltage or PDH currents has still only been run on the synthetic demo logs. Getting more real logs is the first job (section 7).
 
 Work on a branch and open a pull request; don't push to `main` unless the owner asks.
+
+**One conversation per big task.** The owner was told to start a new conversation for each major piece of work (a feature, a batch of fixes from a real log), because very long conversations get compressed and details are lost. So you may be starting cold on a narrow task: this file and `AGENTS.md` are your memory. Before you finish a task, update this file (sections 6 to 8 at least) and its copy in the Claude Project, so the next conversation starts from the truth.
 
 ## 1. What Brownout is
 
@@ -80,14 +93,14 @@ npm run dev            # the app, with hot reload
 
 Things to know about the tests:
 
-- **Demo logs must exist** (`npm run make-demo`) before `smoke`, `uitest` and `bench`. They are git-ignored and not in the delivered zip.
-- **Real logs go in `fixtures/local/`** (git-ignored, not in the zip). The owner's CURIE Q89 log (71.5 MB) is not in the zip either: ask them to attach it again if you need it. `src/core/reallog.test.ts` keeps its key names and quirks as small hand-built logs, so the unit tests cover it without the file.
+- **Demo logs must exist** (`npm run make-demo`) before `smoke`, `uitest` and `bench`. They are git-ignored, so a fresh clone doesn't have them.
+- **Real logs go in `fixtures/local/`** (git-ignored, so never in the repo). The owner's CURIE Q89 log (71.5 MB) is not in the repo: ask them to attach it again if you need it. `src/core/reallog.test.ts` keeps its key names and quirks as small hand-built logs, so the unit tests cover it without the file.
 - On Linux with no display, `uitest` and `smoke` re-run themselves under `xvfb-run`. Install `xvfb`.
 - `uitest` generates a test video with `ffmpeg` (libx264) if `smoke/ui-test-video.mp4` is missing. `ffmpeg` must be on the PATH.
 - Each test run uses a throwaway profile folder through the `BROWNOUT_USER_DATA` environment variable, so it never touches real settings.
 - The renderer exposes its stores on `window.__brownout` (`src/renderer/src/main.tsx`) for the test and for DevTools.
 - **Look at the screenshots.** Passing checks have missed real bugs more than once (section 5, "Testing lessons").
-- **CI runs on GitHub on every push and pull request** (`.github/workflows/ci.yml`): install, demo logs, `npm run check`, bench, build, smoke and the UI test. It passed on PR #1. The runner has no GPU, so CI sets `BROWNOUT_DISABLE_GPU=1` (software rendering). Without it, window captures fail with Chromium's `UnknownVizError`. Set the same variable on any machine without a GPU.
+- **CI runs on GitHub on every push and pull request** (`.github/workflows/ci.yml`): install, demo logs, `npm run check`, bench, build, smoke and the UI test. It has passed on every pull request so far. The runner has no GPU, so CI sets `BROWNOUT_DISABLE_GPU=1` (software rendering). Without it, window captures fail with Chromium's `UnknownVizError`. Set the same variable on any machine without a GPU.
 
 Command-line flags, on the dev build and the packaged app: `--open <file.wpilog>` (repeatable), `--demo`, `--preset <id>` (`quick`, `power`, `autos`, `compare`, `code`, `replay`), `--screenshot <png>`.
 
@@ -239,7 +252,7 @@ New decisions go in the decisions log at the top of `docs/frc-logging-landscape-
 | Match report | one demo log and CURIE Q89, rendered and looked at; one page each | a log with many brownouts or long error text |
 | Performance | `bench`: demo logs about 1 to 1.7 s per 100 MB; CURIE Q89 (71.5 MB) indexed in 0.23 s and opened in the app in about 1 s | a slow laptop; several large logs at once |
 | Platforms | Linux under xvfb only | Windows and macOS, in any form |
-| Installers | built by the release workflow on GitHub for Windows (installer + portable), macOS (Apple silicon + Intel DMGs) and Linux (AppImage + .deb), all unsigned; the packaged Linux app was launched and opened the demo logs | no installer has been installed or run on Windows or macOS |
+| Installers | built by the release workflow on GitHub for Windows (installer + portable), macOS (Apple silicon + Intel, DMG and zip) and Linux (AppImage + .deb), all unsigned; published as the v0.5.1 pre-release; one download link checked; the packaged Linux app was launched and opened the demo logs | no installer has been installed or run on Windows or macOS |
 
 ### What the first real log found (all fixed in v0.5.1)
 
@@ -264,9 +277,7 @@ Also from that pass:
 
 ### P0: do these first
 
-**1. Merge pull request #1.** It adds the whole app to `main` on GitHub; CI passed. If the owner hasn't merged it, ask them to. "Rebase and merge" or "Create a merge commit" keeps the 12 steps; "Squash" collapses them into one.
-
-**2. Get more real logs.** One real log has been checked (section 6). Ask the owner for any of these; each covers features that have only run on synthetic data:
+**1. Get more real logs.** One real log has been checked (section 6). Ask the owner for any of these; each covers features that have only run on synthetic data:
 - a log with battery voltage, total current or PDH channel currents, for brownouts, battery health and the subsystem math with real voltage
 - an AdvantageKit log, for its key names for robot state, vision, joysticks and commands
 - a match where the robot browned out
@@ -278,43 +289,47 @@ For each log:
 - Run `npm run bench`; it includes `fixtures/local/`.
 - For every fix, add a hand-built case to `src/core/reallog.test.ts` with the real key names, and record the layout in `docs/frc-log-format-reference.md` (section 7a has the first one).
 
+**2. Find out how the installers do on real computers.** v0.5.1's Windows and macOS installers built on GitHub, but nobody has installed them yet, and the owner's own operating system is not confirmed.
+- Ask the owner (or their team) to install from the release page and try: open a log, each panel, a real video, the match report, copy panel as image.
+- Likely trouble spots:
+  - file paths in the video protocol (`registerVideo` and the `protocol.handle` in `src/main/index.ts`)
+  - the clipboard
+  - the PDF page size
+  - on Apple-silicon Macs, an unsigned app may be reported as "damaged": the release notes give the `xattr -cr` fix
+- When it has been confirmed on a platform, update the verification table (section 6) and consider taking the next release out of pre-release.
+
 **3. Confirm the empty-graph bug is gone.** On v0.4 the owner sent screenshots of two graph panels of elevator fields with nothing drawn. It was never reproduced. The real log showed built-in layouts opening graphs for fields the log lacks (section 6, item 2), which is the likely cause.
 - Ask the owner whether it still happens on v0.5.1.
 - If it does, ask which layout and which fields. Other suspects: a field type the graph cannot plot, or values that are all NaN. A graph with fields that draw nothing should say why; it doesn't yet.
 
-**4. Run it on the owner's operating system.** Their OS is not confirmed. Everything was tested on Linux.
-- Ask what they use. Have them run `npm run dev` and try: open a log, each panel, a real video, the match report, copy panel as image.
-- Likely trouble spots: file paths in the video protocol (`registerVideo` and the `protocol.handle` in `src/main/index.ts`), the clipboard, PDF page size.
-- Then have them install the build from the release (section 10) and try the same things. Windows and macOS installers build on GitHub but have never been installed and run on a real machine.
-
 ### P1: next
 
-**5. PhotonVision raw results.** They are protobuf, which the reader shows as raw bytes.
+**4. PhotonVision raw results.** They are protobuf, which the reader shows as raw bytes.
 - Port a protobuf decoder into `src/core` (AdvantageScope's `ProtoDecoder.ts` is BSD-3 and may be reused: `AGENTS.md` rule 21). Schemas are in the log under `/.schema/proto:*`.
 - Surface decoded messages as fields, with generated children like structs.
 - Add a PhotonVision case to `detectCameras`, `tagIdsFromValue` and `poseFromValue`, with unit tests.
 - Teams that already log PhotonVision's pose estimate as a struct work today through the camera editor.
 
-**6. 2027 control system check.** The 2027 key names were written from documentation, not from a log.
+**5. 2027 control system check.** The 2027 key names were written from documentation, not from a log.
 - With a real 2027 log, verify the controller button numbering and D-pad encoding (`controllerKeys(..., era2027)`), the scheduler field name, and robot state.
 - After kickoff, add the 2027 field picture and tag map: recipe "New field season" in `AGENTS.md`.
 
-**7. Performance on a real machine.**
+**6. Performance on a real machine.**
 - Open a 100 MB log on an ordinary team laptop. Watch load time, memory, and scrubbing with several graphs open.
 - If slow: check that caches are hit (`decimated()` in `GraphPanel.tsx`, `stripRuns()` in `Timeline.tsx`), then that the Potato mode offer appears.
 - The commands panel rebuilds its rows per series identity, and the controller panel redraws on every cursor move; profile both with three logs open.
 
-**8. Close the gaps against the plan** (`docs/next-version-plan.md` lists them).
+**7. Close the gaps against the plan** (`docs/next-version-plan.md` lists them).
 - Camera mount as a full 3D transform, if a team needs lines drawn from the true camera position. Today it is forward and left only. Extend `Camera.mount` in `state/profiles.ts` (with a guard in `normalizeProfile`), the editor, and the drawing in `FieldPanel.tsx`.
 - Bumper colors in the robot editor. Today bumpers follow the alliance.
 - Draw the robot's parts in the swerve panel too, through `drawLayers`.
 
-**9. Video.**
+**8. Video.**
 - Detect HEVC and say so before the generic error where possible.
 - Sound is muted on purpose, for autoplay and because several logs may have videos. Consider an unmute button for the selected log.
 - Consider a "sync to the first robot movement" helper that jumps the timeline to the first non-zero drive output.
 
-**10. Match report.**
+**9. Match report.**
 - Let the user choose sections, and test with a log that has many brownouts to confirm it paginates cleanly.
 - An event summary across several logs (one row per match) is a natural next step and fits the app's purpose.
 
@@ -352,17 +367,22 @@ Each of these is a self-contained feature. Follow the matching recipe in `AGENTS
 - **With three or more logs at the same spot,** the field's camera lines and labels overlap heavily. The Display menu can turn cameras off.
 - **`npm install` reports six moderate vulnerabilities and some deprecation warnings.** They come from development dependencies; which packages was not investigated. Do not run `npm audit fix --force`: it upgrades across major versions and breaks the build.
 - **Electron 45 specifics:** there is no `clipboard.writeImage`; `lib/capture.ts` uses `clipboard.write([new ClipboardItem(...)])`. H.264 playback relies on the codecs Electron ships.
+- **Running the Release workflow twice at once** (a double tap on "Run workflow") makes one run release and the other fail with "Tag v… already exists". That failure is the guard working and changes nothing; it happened once for v0.5.1.
+- **"Automatically delete head branches" is off** in the repo settings, so merged branches stay until the owner deletes them. Suggest turning it on if branches pile up.
+- **The README's AI disclaimer quotes test counts** (45 unit tests, 181 UI checks) and lists the owner's main ideas. Keep both true when they change (section 10).
 - **"Error: Electron uninstall"** on first run means the Electron binary did not download. `scripts/ensure-electron.mjs` handles it; behind a proxy, set `ELECTRON_MIRROR`. The owner hit this once.
 
 ## 9. Working with the owner
 
-- They are building this for their team and steer by trying the app and sending screenshots, usually with a short note. Read the screenshots closely: which button is lit, which panel is empty. Their v0.4 report ("some of the categories don't work") turned out to be every toolbar menu being invisible.
+- The owner (RoboticsIsEpik on the license and commits, `SuppressedCoder` on GitHub) is building this for their FRC team. They steer by trying the app and sending screenshots, usually with a short note. Read the screenshots closely: which button is lit, which panel is empty. Their v0.4 report ("some of the categories don't work") turned out to be every toolbar menu being invisible.
 - They often want an **outline first** ("do not edit anything yet"), then say "do it". When they ask for an outline, do not touch code.
-- They run the app themselves with `npm install` and `npm run dev` from a zip you send. They do not see your working folder, so nothing counts as delivered until the zip is sent.
+- **They are often on their phone.** They cannot run a terminal there. Do the git and GitHub steps yourself, and give them steps they can do in a phone's browser: merging pull requests, deleting branches, running the Release workflow, editing and publishing releases. The GitHub app does not cover all of these; say "in your phone's browser" and mention switching to the desktop site if a button is missing.
+- They get the code from GitHub now. Send a zip only if they ask (section 10 has the command).
 - They prefer math written in LaTeX in replies.
 - Standing rules from them: no emoji, custom icons only; only the timeline moves time; it must stay usable on small screens; vision and everything else must be general, never tied to one team's field names.
-- Deliver a zip of the project without `node_modules`, `out`, `dist`, `smoke`, `fixtures/demo`, `fixtures/local` and `src/renderer/public/demo`. Never put a team's own log in the zip. They regenerate the demo logs with `npm run make-demo`.
-- Tell them plainly what was and was not tested. They have been told that only synthetic logs have been used.
+- They asked for the large disclaimer at the top of the README saying the project is written entirely by AI from their ideas. Keep it, and keep it accurate.
+- Never put a team's own log in the repo or a zip.
+- Tell them plainly what was and was not tested.
 - Asking for a real log is worth repeating. It unblocks more than any feature.
 
 ## 10. Release checklist
@@ -370,12 +390,17 @@ Each of these is a self-contained feature. Follow the matching recipe in `AGENTS
 1. `npx prettier --write "src/**/*.{ts,tsx,css}" "scripts/*.mts"`
 2. `npm run check`, `npm run uitest`, `npm run smoke`, `npm run bench`, `npm run web:build`, and `npm run reallog` when there are logs in `fixtures/local/`
 3. Open every new or changed screenshot in `smoke/`, including `real-*.png` and `real-report.pdf`.
-4. Update `README.md`, `AGENTS.md` if a rule changed, `docs/implementation-status.md`, and this file (sections 6 to 8).
+4. Update `README.md` (including the test counts and feature list in the AI disclaimer at the top), `AGENTS.md` if a rule changed, `docs/implementation-status.md`, and this file (sections 6 to 8).
 5. The Claude Project holds copies of the docs under `claude/` (`brownout-implementation-status.md`, `brownout-next-version-plan.md`, `HANDOFF.md`, and the five specs). Update the copy whenever the file in `docs/` changes.
-6. Bump `version` in `package.json` and in the first two `version` fields of `package-lock.json`. Do not search-and-replace version strings in the lockfile: dependency versions can collide with the app's.
+6. Bump `version` in `package.json` and in the first two `version` fields of `package-lock.json`. Do not search-and-replace version strings in the lockfile: dependency versions can collide with the app's. The version is chosen by hand, following semantic versioning as explained to the owner:
+   - PATCH (0.5.1 → 0.5.2) for fixes only
+   - MINOR (0.5 → 0.6) for new features
+   - MAJOR stays 0 until the owner decides it is ready, a sensible point being after it has been installed on Windows and Macs and used at an event
+   - a dash (`0.6.0-beta.1`) for test builds, which the workflow publishes as pre-releases
 7. Commit on a branch, push, and open a pull request; CI must pass.
 8. **To publish a release:** after the version bump is merged, either run the **Release** workflow on `main` from the Actions tab with "Make a draft release" ticked (the workflow creates the tag `v<version>` itself), or push a tag (`git tag v0.5.1 && git push origin v0.5.1`). A version with a dash such as `0.6.0-beta.1` makes a pre-release. `.github/workflows/release.yml` builds the installers on Windows, macOS and Linux and creates a **draft** release with them attached; if a release for the tag already exists, it adds the installers to it. The owner reviews and publishes it. Only start a release when the owner asks. **A Claude session cannot create tags** (the git proxy and the GitHub API both refuse; branches and pull requests work), so from a session the owner starts it with the Actions button, or you trigger it with `gh api repos/SuppressedCoder/Brownout/actions/workflows/release.yml/dispatches --method POST -f ref=main -F 'inputs[release]=true'` if that endpoint is allowed. The same workflow test-builds the installers on any pull request that touches packaging (`electron-builder.yml`, `package.json`, `build/`, the workflow).
-9. If the owner also wants a zip, build it from the parent folder:
+9. Releases so far: **v0.5.1** (2026-11-17, pre-release, started from the Actions tab by the owner).
+10. If the owner also wants a zip, build it from the parent folder:
 
 ```bash
 zip -qr brownout.zip brownout -x "brownout/node_modules/*" "brownout/out/*" "brownout/dist/*" \
