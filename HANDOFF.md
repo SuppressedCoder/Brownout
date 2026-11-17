@@ -29,7 +29,7 @@ Written 2026-11-16 by the model that built the app so far, and last updated 2026
 3. `docs/implementation-status.md`: what is built, item by item, with honest notes on what is partial.
 4. The spec in `docs/` that matches your task (listed in `AGENTS.md`).
 
-State in one paragraph: the app works end to end, every planned feature from the last two plans is built, and v0.5.1 is released with installers for all three operating systems. `npm run check` (45 unit tests) and `npm run uitest` (205 checks) pass, in CI on GitHub (Linux) and on the owner's Windows 11 computer. **One real robot log has been checked:** CURIE Q89 from the 2026 Championship, a DataLogManager log with no AdvantageKit and no battery voltage. It exposed ten real bugs, all fixed in v0.5.1; section 6 lists them. Everything that needs battery voltage or PDH currents has still only been run on the synthetic demo logs. Getting more real logs is the first job (section 7).
+State in one paragraph: the app works end to end, every planned feature from the last two plans is built, and v0.5.1 is released with installers for all three operating systems. `npm run check` (48 unit tests) and `npm run uitest` (210 checks) pass, in CI on GitHub (Linux) and on the owner's Windows 11 computer. **One real robot log has been checked:** CURIE Q89 from the 2026 Championship, a DataLogManager log with no AdvantageKit and no battery voltage. It exposed ten real bugs, all fixed in v0.5.1; section 6 lists them. Everything that needs battery voltage or PDH currents has still only been run on the synthetic demo logs. Getting more real logs is the first job (section 7).
 
 Work on a branch and open a pull request; don't push to `main` unless the owner asks.
 
@@ -202,6 +202,7 @@ Analyzers and built-in presets find fields by role (battery voltage, robot pose,
 
   While playing, the video runs at the timeline's speed and is re-seeked when it drifts more than 0.3 s (at most once a second). **Every seek goes through `chaseSeek`** (`lib/videoSeek.ts`): one seek at a time, then straight to the newest target. Setting `currentTime` on every mouse move made Chromium restart from the last keyframe each time, so a dragged phone video showed one frozen frame (measured on a 1080p clip with a keyframe every 10 s: 1 frame shown during a 3 s drag before, 21 after). The main process serves the file through the `brownout-media://` scheme with byte ranges; each picked file gets an opaque address, and only video file types are accepted.
 - **Video sync view** (`components/VideoSync.tsx`, opened by `uiStore.videoSyncFor`): opens after a video is chosen and from the Sync menu. The video and the log are unlinked inside it and it takes the keyboard (Space, arrows, Shift+arrows, comma/period, Enter, Esc), so it never moves shared time; Apply writes the one number, `logMinusVideo = moment − pairedVideoTime`. Markers come from robot state plus the first robot speed above 0.15 m/s (`/Brownout/Pose/Speed`).
+- **Video offering** (`lib/videoOffer.ts`, `core/videoMatch.ts`): when a log opens without a video, the main process lists video files next to the log (only logs it read this run) and in the videos folder from Settings (stored in `userData/video-folder.json`), and the one named like the match (from logged match info, else the file name's `Q12` part) is offered in a message. The empty video panel lists the same matches. "Not now" goes into `brownout.videoOffers.v1`. A file gets a `brownout-media://` address only when the user accepts it.
 - **Robot parts** (`lib/robotDraw.ts`): `drawLayers` is used by both the 2D field and the editor preview. The canvas is already at the robot's center and heading, with +x forward and −y to the robot's left. A picture's top edge is the robot's front. Limits: 24 parts, raster pictures downscaled to 512 px, SVGs up to 300 kB, all stored as inline `data:` URLs.
 - **Match report** (`src/core/report.ts` builds the page, `lib/report.ts` gathers the data): a self-contained page with no scripts and no outside requests, printed by a hidden window with JavaScript off.
 
@@ -336,7 +337,7 @@ For each log:
 - Bumper colors in the robot editor. Today bumpers follow the alliance.
 - Draw the robot's parts in the swerve panel too, through `drawLayers`.
 
-**8. Video.** The sync view, seek chasing and a "robot starts moving" marker are done (2026-11-17). Left:
+**8. Video.** The sync view, seek chasing, a "robot starts moving" marker and offering a video by its name are done (2026-11-17). Left:
 - Try it with real match footage (phone and stream downloads) and ask the owner whether dragging now keeps up. With few keyframes the picture updates about 7 times a second while dragging. If that is not enough, decode frames around the cursor ahead of time: WebCodecs in a worker with mp4box.js (BSD-3-Clause) to read MP4, the same idea as AdvantageScope's frame cache without FFmpeg. That would also give the sync view thumbnails and a sound waveform (the start horn and teleop bell).
 - Detect HEVC and say so before the generic error where possible.
 - Sound is muted in the panel on purpose; the sync view has a sound switch.

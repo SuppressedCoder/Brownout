@@ -65,6 +65,7 @@ What the app in this repository does today, mapped to the specs. ✓ built · �
 | Compact view: one-row toolbars with an overflow menu, `low` controls leave first, graph chips collapse to a count, one-line legend strip, sidebar hides on narrow windows; automatic by width, or forced in Settings | ✓ | |
 | Own icon set (`lib/icons.ts`), no emoji or symbol characters anywhere in the UI | ✓ | checked by the UI test |
 | Copy a panel to the clipboard as an image, or save it as a PNG | ✓ | desktop: any panel (visible part); browser build: canvas panels only |
+| Video offering: when a log opens without a video, the video named like its match (`Q12`, `qm12`, `Qual 12`, `2026nyroc_qm12`, `Match 12`) next to the log file or in the videos folder (Settings) is offered in a message; the empty video panel lists the matches; "Not now" is remembered | ✓ | `core/videoMatch.ts` ranks, main lists (`list-videos-near`: only folders of logs this run read, and the videos folder picked through its dialog), `lib/videoOffer.ts` offers; a file gets a playable address only when the user accepts |
 | Video sync view: large video with its own Play (0.25× to 1×), frame and second steps, sound; this log's markers (auto start, robot starts moving, teleop start, teleop end) and robot speed; pair a frame with a marker, play to check, Apply | ✓ | `components/VideoSync.tsx`; opens after choosing a video and from the Sync menu; nothing moves shared time until Apply |
 | Dockable grid (split, tabs, drag, close), watermark drop target, smart drop; maximize a panel (button, double-click its tab, Ctrl+Enter) | ✓ | workspace tabs ✗; pop-out windows ✗ (dockview refuses `file:` pop-out pages and the installed app loads from `file://`) |
 | Presets = layouts: built-ins add only fields the log has; without battery voltage and total current they show motor currents and logged watts, Compare Matches uses robot speed, and an empty graph says what the log lacks and how to log it; active preset shown with "(modified)"; built-ins (Quick Look, Power & Brownouts, Autonomous Review, Compare Matches, Code Health, Match Replay); user presets with save / update / rename / duplicate / delete; export chosen presets; import with overwrite / keep both / skip; confirm before discarding an unsaved layout | ✓ | user presets store exact field names (built-ins resolve roles) |
@@ -74,7 +75,7 @@ What the app in this repository does today, mapped to the specs. ✓ built · �
 | In-app dialogs and toasts (no `prompt()`), generated shortcut sheet | ✓ | |
 | CSV export (selection or visible range) | ✓ | SVG export ✗ |
 | Browser build (`npm run web`) | ✓ | |
-| UI test driving the real app (`npm run uitest`, 205 checks) | ✓ | passes on Linux (CI) and on Windows 11 |
+| UI test driving the real app (`npm run uitest`, 210 checks) | ✓ | passes on Linux (CI) and on Windows 11 |
 | Real-log check (`npm run reallog`): opens logs from `fixtures/local/`, sets up suggested subsystems, applies every preset, captures the camera view and the match report, writes a summary | ✓ | it checks nothing by itself; read `smoke/real-summary.json` and the screenshots |
 | Mechanism (side view), XY plot, 3D field | ✗ | |
 | Robot FTP download, DS folder watching, library | ✗ | P1 |

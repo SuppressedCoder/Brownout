@@ -2076,6 +2076,19 @@ h4 {
   text-align: center;
   max-width: 80%;
 }
+.video-suggest {
+  pointer-events: auto; /* the placeholder around it lets clicks through */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+.video-suggest-hint {
+  margin-top: 10px;
+  max-width: 420px;
+}
+
 /* Video sync view */
 .modal.video-sync-modal {
   width: 94vw;

@@ -18,6 +18,8 @@ import { useStore } from '../state/store';
 import { videoStore, setVideo, setVideoUrl, setVideoSync, removeVideo } from '../state/videos';
 import { toast, uiStore } from '../state/ui';
 import { chaseSeek, seekTarget } from '../lib/videoSeek';
+import { findVideosFor, useVideoFor } from '../lib/videoOffer';
+import { logMatchKey, type VideoCandidate } from '@core/videoMatch';
 import { formatTime } from '@core/alignment';
 import { Toolbar, ToolButton, ToolSelect, ToolGroup, ToolSpacer } from '../components/Toolbar';
 import { MenuButton, MenuItem, MenuSeparator } from '../components/Menu';
@@ -271,6 +273,7 @@ export function VideoPanel({ id }: { id: string }) {
             Choose the match video for <b style={{ color: log.color }}>{log.name}</b>, then sync it to the log.
             <br />
             MP4 (H.264) and WebM play. Phone clips recorded as HEVC may need converting first.
+            <Suggestions log={log} />
           </div>
         </div>
       ) : missing ? (
@@ -327,6 +330,40 @@ export function VideoPanel({ id }: { id: string }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Videos next to the log or in the videos folder whose names say this match (desktop app only). */
+function Suggestions({ log }: { log: LogEntry }) {
+  const [found, setFound] = useState<VideoCandidate[] | null>(null);
+  useEffect(() => {
+    let alive = true;
+    setFound(null);
+    void findVideosFor(log).then((f) => alive && setFound(f));
+    return () => {
+      alive = false;
+    };
+  }, [log]);
+  if (!window.brownout) return null;
+  const key = logMatchKey(log.matchInfo, log.fileName);
+  const label = key ? `${key.kind.toUpperCase()}${key.number}` : null;
+  if (found?.length)
+    return (
+      <div className="video-suggest">
+        <div>Videos that look like this match:</div>
+        {found.slice(0, 3).map((c) => (
+          <button key={c.path} className="btn primary" onClick={() => void useVideoFor(log, c)} title={c.path} data-testid="video-suggestion">
+            Use {c.name}
+          </button>
+        ))}
+      </div>
+    );
+  return (
+    <div className="hint video-suggest-hint">
+      {label
+        ? `Brownout looks for a video named like this match (${label}, qm${key!.number}, Qual ${key!.number}) next to the log and in the videos folder set in Settings, and found none.`
+        : 'This log does not say which match it is, so Brownout cannot look for its video by name.'}
     </div>
   );
 }

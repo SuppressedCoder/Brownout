@@ -10,7 +10,7 @@
  */
 import { _electron as electron, type ElectronApplication, type Page } from 'playwright-core';
 import { execSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, readFileSync, writeFileSync, copyFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
@@ -1175,6 +1175,41 @@ async function main() {
     JSON.stringify(applied),
   );
 
+  console.log('Video offering');
+  const videoDir = resolve(outDir, 'ui-videos');
+  rmSync(videoDir, { recursive: true, force: true });
+  mkdirSync(videoDir, { recursive: true });
+  copyFileSync(videoPath, resolve(videoDir, '2026nyroc_qm18.mp4'));
+  copyFileSync(videoPath, resolve(videoDir, 'Q180.mp4')); // a different match
+  copyFileSync(videoPath, resolve(videoDir, 'Practice 18.mp4')); // a different kind of match
+  await app.evaluate(({ dialog }, p) => {
+    dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [p] })) as never;
+  }, videoDir);
+  await page.evaluate(`window.__brownout.uiStore.set({ settingsOpen: true, settingsTab: 'general' })`);
+  await page.locator('[data-testid=video-folder-pick]').click();
+  await page.waitForTimeout(300);
+  check('the videos folder is set in Settings', (await page.locator('[data-testid=video-folder]').innerText()).includes('ui-videos'));
+  await page.keyboard.press('Escape');
+  await page.evaluate(
+    `(() => { const s = window.__brownout; const ps = s.panelStore.get().panels; const id = Object.keys(ps).find(k => ps[k].type === 'video'); s.panelStore.set({ panels: { ...ps, [id]: { ...ps[id], logId: s.sessionStore.get().logs[1].id } } }); })()`,
+  );
+  await page.waitForSelector('[data-testid=video-suggestion]');
+  const suggestions = await page.locator('[data-testid=video-suggestion]').allInnerTexts();
+  check(
+    'the empty video panel suggests the video named like the match, and only it',
+    suggestions.length === 1 && suggestions[0] === 'Use 2026nyroc_qm18.mp4',
+    suggestions.join(', '),
+  );
+  await page.screenshot({ path: resolve(outDir, 'ui-video-suggestion.png') });
+  await page.locator('[data-testid=video-suggestion]').click();
+  await page.waitForSelector('[data-testid=video-sync-view]');
+  const used = await state<string | undefined>(page, `s.videoStore.get().byLog[s.sessionStore.get().logs[1].fileName]?.path`);
+  check('using it attaches the video and opens the sync view', !!used && used.endsWith('2026nyroc_qm18.mp4'), String(used));
+  await page.screenshot({ path: resolve(outDir, 'ui-video-offer.png') });
+  await page.locator('[data-testid=video-sync-cancel]').click();
+  // for session 2: a video for the third demo log, to be offered when the session reopens
+  copyFileSync(videoPath, resolve(videoDir, 'NYROC Q23.mp4'));
+
   console.log('Match report');
   const reportPath = resolve(outDir, 'ui-report.pdf');
   rmSync(reportPath, { force: true });
@@ -1312,6 +1347,19 @@ async function main() {
   await waitLogs(page, 3);
   const restored = await state<string[]>(page, 's.sessionStore.get().logs.map(l => l.name)');
   check('last session logs reopen on launch', restored.length === 3, restored.join(', '));
+  const offerToast = page.locator('.toast', { hasText: 'Found a video that looks like' });
+  const offered = await offerToast
+    .first()
+    .waitFor({ timeout: 6000 })
+    .then(() => true)
+    .catch(() => false);
+  check(
+    'a log that opens without a video is offered the one named like its match',
+    offered && (await offerToast.count()) === 1 && (await offerToast.innerText()).includes('NYROC Q23.mp4'),
+    offered ? await offerToast.first().innerText() : 'no offer',
+  );
+  if (offered) await offerToast.locator('button', { hasText: 'Not now' }).click();
+  check('"Not now" is remembered', String(await page.evaluate(`localStorage.getItem('brownout.videoOffers.v1') || ''`)).includes('NYROC Q23.mp4'));
   check('settings persisted (rebound key)', (await state<string>(page, 's.settingsStore.get().keybinds.play')) === 'P');
   check('presets persisted', (await state<number>(page, 's.presetStore.get().user.length')) === 2);
   check('active preset remembered', (await presetText(page)) === 'Quick Look', await presetText(page));

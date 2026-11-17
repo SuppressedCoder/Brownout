@@ -6,6 +6,7 @@ import { controllerKeys, decodeButtons, decodePov } from './controller';
 import { commandsFromNames, commandsFromBooleans, detectCommandSources } from './commands';
 import { reportHtml, matchClock, matchTitle, type ReportInput } from './report';
 import type { ModeRange } from './robotState';
+import { logMatchKey, videoMatchScore, rankVideos } from './videoMatch';
 
 const field = (key: string, kind: FieldInfo['kind'], structName?: string): FieldInfo => ({ key, kind, type: kind, count: 1, structName }) as FieldInfo;
 
@@ -318,5 +319,32 @@ describe('match report', () => {
     expect(bare).toContain('No loop overruns.');
     expect(bare).not.toContain('<svg');
     expect(bare).not.toContain('<h2>Vision</h2>');
+  });
+});
+
+describe('finding the match video for a log', () => {
+  it('knows the match from logged match info, else from the file name', () => {
+    expect(logMatchKey({ matchType: 'Qualification', matchNumber: 89, eventName: 'CURIE' }, 'whatever.wpilog')).toEqual({
+      kind: 'q',
+      number: 89,
+      event: 'CURIE',
+    });
+    expect(logMatchKey({}, 'FRC_20260321_143012_NYROC_Q12.wpilog')).toEqual({ kind: 'q', number: 12, event: 'NYROC' });
+    expect(logMatchKey({}, 'FRC_20260321_143012_E3.wpilog')).toEqual({ kind: 'e', number: 3, event: undefined });
+    expect(logMatchKey({ matchType: 'Elimination', matchNumber: 4 }, 'FRC_20260321_143012_NYROC_Q12.wpilog')).toEqual({ kind: 'e', number: 4, event: 'NYROC' });
+    expect(logMatchKey({}, 'FRC_20260321_143012.wpilog')).toBeNull();
+    expect(logMatchKey({ matchType: 'None', matchNumber: 0 }, 'practice.wpilog')).toBeNull();
+  });
+  it('matches the usual ways a video names a match, and not its neighbors', () => {
+    const q12 = { kind: 'q' as const, number: 12, event: 'NYROC' };
+    for (const n of ['Q12.mp4', 'q 12.mov', 'Qual 12.mp4', 'Qualification_12.mp4', '2026nyroc_qm12.mp4', 'NYROC Q-012.mp4', 'IMG Q12 front.mp4'])
+      expect(videoMatchScore(n, q12), n).toBeGreaterThan(0);
+    for (const n of ['Q120.mp4', 'Q1.mp4', 'faq12.mp4', 'Practice 12.mp4', 'E12.mp4', 'playoff 12.mp4', 'IMG_0012.mp4', 'random.mp4'])
+      expect(videoMatchScore(n, q12), n).toBe(0);
+    expect(videoMatchScore('Match 12.mp4', q12)).toBe(1);
+  });
+  it('ranks the specific name and the event first', () => {
+    const files = ['Match 12.mp4', 'Q12.mp4', 'NYROC Q12.mp4', 'Q13.mp4'].map((name) => ({ name, path: `/v/${name}` }));
+    expect(rankVideos(files, { kind: 'q', number: 12, event: 'NYROC' }).map((f) => f.name)).toEqual(['NYROC Q12.mp4', 'Q12.mp4', 'Match 12.mp4']);
   });
 });
