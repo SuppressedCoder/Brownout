@@ -22,6 +22,7 @@ import { withAlpha } from '../lib/colors';
 import { drawCursor, drawTimeAxis, fitText } from '../lib/draw';
 import { Toolbar, ToolButton, ToolSelect, ToolGroup } from '../components/Toolbar';
 import { FieldPicker } from '../components/FieldPicker';
+import { GuideLink } from '../components/Guide';
 import { Icon } from '../components/Icon';
 import { shortKey } from '../lib/fields';
 
@@ -192,8 +193,18 @@ export function CommandsPanel({ id }: { id: string }) {
         <div className="panel-placeholder">Open a log to see its commands.</div>
       ) : !anySource ? (
         <div className="panel-placeholder">
-          No command list found. Publish the scheduler with <code>SmartDashboard.putData(CommandScheduler.getInstance())</code> and log NetworkTables, or pick a
-          string-array field that lists the running commands.
+          <div>
+            No record of the robot's commands in this log. This panel finds it by itself; you do not add fields. The robot code has to record it:
+            <br />
+            WPILib: <code>SmartDashboard.putData(CommandScheduler.getInstance())</code> with <code>DataLogManager.start()</code>.
+            <br />
+            AdvantageKit: log <code>CommandsAll/&lt;name&gt;</code> as true while each command runs, from the scheduler&apos;s onCommandInitialize,
+            onCommandFinish and onCommandInterrupt.
+            <br />
+            If the log keeps the list under another name, pick it with Source field.
+            <br />
+            <GuideLink section="commands">The code for both, in the guide</GuideLink>
+          </div>
         </div>
       ) : (
         <div className="scroll commands-body">

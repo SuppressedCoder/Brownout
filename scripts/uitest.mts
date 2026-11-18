@@ -192,6 +192,43 @@ async function main() {
     const sb2 = await page.locator('.sidebar').boundingBox();
     check('double-clicking it goes back to the default width', !!sb0 && !!sb2 && Math.abs(sb2.width - sb0.width) < 2);
   }
+  console.log('The guide inside the app');
+  {
+    await page.evaluate(`document.activeElement && document.activeElement.blur()`);
+    await page.keyboard.press('F1');
+    await page.waitForSelector('[data-testid=guide]');
+    const h2 = await page.locator('[data-testid=guide] .guide-body h2').count();
+    check('F1 opens the guide, with every section of docs/features.md', h2 >= 17, String(h2));
+    check('no emoji or symbol characters in the guide', (await pictographs(page)) === '', await pictographs(page));
+    await page.screenshot({ path: resolve(outDir, 'ui-guide.png') });
+    await page.locator('[data-testid=guide-search]').fill('putData');
+    await page.waitForTimeout(150);
+    const found = await page.locator('[data-testid=guide] .guide-body h2').allInnerTexts();
+    check(
+      'searching the guide keeps only the sections that mention it',
+      found.length >= 1 && found.length < h2 && found.some((t) => t.includes('The panels')),
+      found.join(' | '),
+    );
+    await page.locator('[data-testid=help-tab-keys]').click();
+    check('the Shortcuts & tips tab is still there', (await page.locator('.help-body table.kv').count()) > 0);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(150);
+    check('Escape closes it', (await page.locator('.modal.help').count()) === 0);
+    // a panel's link opens the guide at its part
+    const link = page.locator('[data-testid=guide-link]').first();
+    if ((await link.count()) > 0) {
+      await link.click();
+      await page.waitForSelector('[data-testid=guide]');
+      await page.waitForTimeout(300);
+      const pos = (await page.evaluate(
+        `(() => { const b = document.querySelector('.guide-body').getBoundingClientRect(); const h = document.querySelector('[data-guide-id="8-the-panels-what-each-is-for-what-it-needs-how-to-use-it"]').getBoundingClientRect(); return h.top - b.top; })()`,
+      )) as number;
+      check('a panel’s guide link opens the guide at that panel’s part', Math.abs(pos) < 40, String(pos));
+      await page.screenshot({ path: resolve(outDir, 'ui-guide-link.png') });
+      await page.keyboard.press('Escape');
+    } else check('a panel’s guide link opens the guide at that panel’s part', false, 'no guide link on screen');
+  }
+
   await page.locator('[data-testid=file-menu]').click();
   check('the File menu is fully visible', (await menuState(page)) === 'ok', await menuState(page));
   check('no emoji in the File menu', (await pictographs(page)) === '', await pictographs(page));

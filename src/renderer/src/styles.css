@@ -2286,6 +2286,141 @@ h4 {
   max-width: 420px;
 }
 
+/* The guide (help sheet, components/Guide.tsx) */
+.modal.help.guide-open {
+  width: min(1100px, 95vw);
+  height: 88vh;
+  max-height: 88vh;
+}
+.help-tabs {
+  display: inline-flex;
+  gap: 4px;
+}
+.guide {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.guide-toc {
+  flex: 0 0 250px;
+  min-height: 0;
+  padding: 8px;
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.guide-toc .search {
+  max-width: none;
+  margin-bottom: 6px;
+}
+.guide-toc-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--fg);
+  font-size: 12px;
+  padding: 3px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.guide-toc-item:hover {
+  background: var(--active-bg);
+}
+.guide-toc-item.sub {
+  padding-left: 18px;
+  color: var(--fg2);
+  font-size: 11px;
+}
+.guide-body {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 4px 22px 40px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.guide-body h2 {
+  font-size: 18px;
+  margin: 26px 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+.guide-body h3 {
+  font-size: 14px;
+  margin: 20px 0 6px;
+}
+.guide-body p {
+  margin: 6px 0;
+}
+.guide-body ul,
+.guide-body ol {
+  margin: 4px 0;
+  padding-left: 22px;
+}
+.guide-body li {
+  margin: 2px 0;
+}
+.guide-body code {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--bg3);
+  padding: 0 3px;
+  border-radius: 3px;
+}
+.guide-code {
+  background: var(--bg3);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 8px 10px;
+  overflow-x: auto;
+  margin: 6px 0;
+}
+.guide-code code {
+  background: none;
+  padding: 0;
+  white-space: pre;
+}
+.guide-table {
+  border-collapse: collapse;
+  margin: 6px 0;
+  font-size: 12px;
+}
+.guide-table th,
+.guide-table td {
+  border: 1px solid var(--line);
+  padding: 3px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+.guide-table th {
+  background: var(--bg3);
+}
+.guide-body hr {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 14px 0;
+}
+/* a link from a panel to its part of the guide (placeholders let clicks through, this opts back in) */
+.guide-link {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  background: none;
+  border: none;
+  padding: 2px 0;
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
+}
+.guide-link:hover {
+  text-decoration: underline;
+}
+
 /* Video sync view */
 .modal.video-sync-modal {
   width: 94vw;

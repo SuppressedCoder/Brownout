@@ -1,6 +1,6 @@
 # Brownout — instructions for coding agents
 
-Brownout is an Electron + TypeScript + React log viewer / comparison tool for FRC WPILOG files. Most code here is written by AI agents from prompts; people steer, test and review. New to the project? Read `HANDOFF.md` first: where things stand, why they are built this way, and what to do next. Then read the spec that matches your task in `docs/` before changing behavior:
+Brownout is an Electron + TypeScript + React log viewer / comparison tool for FRC WPILOG files. Most code here is written by AI agents from prompts; people steer, test and review. New to the project? Read `HANDOFF.md` first: where things stand, why they are built this way, and what to do next. `docs/features.md` lists every feature the way a user meets it, including the hidden gestures and keys. Then read the spec that matches your task in `docs/` before changing behavior:
 
 - `docs/frc-log-format-reference.md` — WPILOG bytes, struct grammar, key names, robot-state key priority (§1.10)
 - `docs/brownout-viewer-ui-spec.md` — timeline, panels, grid, presets, comparison behavior
@@ -57,5 +57,7 @@ npm run dev       # run the app
 - **New analyzer:** `src/core/analyzers/<name>.ts` (pure function of `LogData` + mode ranges) → call it in the worker's `summarize()` → surface in a panel. Findings carry raw-time stamps so the UI can jump to them.
 - **New derived field:** add it in `summarize()` with `addDerived('/Brownout/...')`; it appears in the field tree like any field.
 - **New key source (logger):** extend the tables in `robotState.ts` / `roles.ts` and add a fixture.
+
+**Keep `docs/features.md` complete.** It is also the guide inside the app (help sheet, Guide tab, F1), so it ships with every build. Every feature you add or change gets its line there, in plain words for a team member. A panel that needs data the log lacks should link to its section with `<GuideLink section="...">` (`components/Guide.tsx`; the section id is the heading as a slug). The guide's Markdown is read by `core/markdown.ts`, which handles headings, paragraphs, nested lists, code blocks, tables and inline code, bold, italic and links; keep to those. A gesture, a modifier key or a shortcut also goes in the help sheet's tips (`components/Help.tsx`; the shortcut list there is generated from `ACTIONS`). Hidden features nobody is told about might as well not exist.
 
 Commit after each step that works. Keep `npm run check` green.

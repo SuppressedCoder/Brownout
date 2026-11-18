@@ -16,6 +16,7 @@ export default defineConfig({
     alias: {
       '@core': resolve(import.meta.dirname, 'src/core'),
       '@renderer': resolve(import.meta.dirname, 'src/renderer/src'),
+      '@docs': resolve(import.meta.dirname, 'docs'),
     },
   },
   worker: { format: 'es' },

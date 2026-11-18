@@ -19,6 +19,7 @@ import { indexAtOrBefore } from '@core/log';
 import { T } from '../lib/theme';
 import { withAlpha } from '../lib/colors';
 import { Toolbar, ToolButton, ToolSelect, ToolGroup } from '../components/Toolbar';
+import { GuideLink } from '../components/Guide';
 
 interface ModuleState {
   speed: number;
@@ -150,6 +151,7 @@ export function SwervePanel({ id }: { id: string }) {
           <div className="panel-placeholder">
             No swerve module states found. Log a <code>SwerveModuleState[]</code> (for example <code>SwerveStates/Measured</code>), or pick the field under Log
             info &amp; health, Field names.
+            <GuideLink section="swerve-drive" />
           </div>
         )}
         {logs.length === 0 && <div className="panel-placeholder">Open a log to see its swerve modules.</div>}

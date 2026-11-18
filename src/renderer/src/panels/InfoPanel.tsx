@@ -12,6 +12,7 @@ import { fileSize } from '../lib/format';
 import { ROLE_LABELS, type Role } from '@core/roles';
 import { Toolbar, ToolSelect } from '../components/Toolbar';
 import { Icon } from '../components/Icon';
+import { GuideLink } from '../components/Guide';
 
 export function InfoPanel({ id }: { id: string }) {
   useStore(panelStore, (s) => s.panels[id] as InfoSettings);
@@ -104,6 +105,7 @@ export function InfoPanel({ id }: { id: string }) {
         <h4>
           Logging health · {present.length}/{log.health.length} recommended signals
         </h4>
+        <GuideLink section="8-the-panels-what-each-is-for-what-it-needs-how-to-use-it">What each panel needs, and the code to log it</GuideLink>
         <div className="health">
           {log.health.map((h) => (
             <div key={h.role} className={`health-item ${h.present ? 'ok' : 'missing'}`}>

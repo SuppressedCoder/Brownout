@@ -11,6 +11,7 @@ import { formatTime } from '@core/alignment';
 import { Toolbar, ToolButton } from '../components/Toolbar';
 import { grid } from '../components/Grid';
 import { DERIVED_PREFIX } from '../worker/protocol';
+import { GuideLink } from '../components/Guide';
 
 const deg = (r?: number) => (r === undefined ? '—' : `${((r * 180) / Math.PI).toFixed(1)}°`);
 const m = (x?: number) => (x === undefined ? '—' : `${(x * 100).toFixed(1)} cm`);
@@ -49,7 +50,12 @@ export function PathsPanel({ id }: { id: string }) {
         <span className="toolbar-note">Max / RMS / end error from the logged target pose vs the actual pose while each path is active.</span>
       </Toolbar>
       {rows.length === 0 ? (
-        <div className="panel-placeholder">No active-path data. Log PathPlanner’s active path and target pose (the Log info &amp; health panel shows how).</div>
+        <div className="panel-placeholder">
+          <div>
+            No active-path data. Log PathPlanner’s active path and target pose.
+            <GuideLink section="path-analysis" />
+          </div>
+        </div>
       ) : (
         <div className="scroll">
           <table className="data-table">

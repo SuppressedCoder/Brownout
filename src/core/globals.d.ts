@@ -7,3 +7,9 @@ declare class TextDecoder {
 declare class TextEncoder {
   encode(input?: string): Uint8Array;
 }
+
+/** Text files bundled as strings (the in-app guide, read by the tests too). */
+declare module '*.md?raw' {
+  const text: string;
+  export default text;
+}

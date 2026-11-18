@@ -8,6 +8,8 @@ import { reportHtml, matchClock, matchTitle, type ReportInput } from './report';
 import type { ModeRange } from './robotState';
 import { logMatchKey, videoMatchScore, rankVideos } from './videoMatch';
 import { findPoseJumps, findDisagreements, annotateFindings, describeFinding } from './analyzers/poseDeviations';
+import { parseMarkdown, parseInline, blockText, type Block } from './markdown';
+import guide from '../../docs/features.md?raw';
 
 const field = (key: string, kind: FieldInfo['kind'], structName?: string): FieldInfo => ({ key, kind, type: kind, count: 1, structName }) as FieldInfo;
 
@@ -428,5 +430,52 @@ describe('where vision and the robot position disagree', () => {
     );
     expect(f[0].during).toEqual(['Path 2', 'AutoAlign', 'Drive']);
     expect(describeFinding(f[0])).toBe('Robot position jumped 1.00 m during Path 2 (AutoAlign, Drive)');
+  });
+});
+
+describe('the in-app guide', () => {
+  const blocks = parseMarkdown(guide);
+  const all = (bs: Block[]): Block[] => bs.flatMap((b) => (b.k === 'list' ? [b, ...b.items.flatMap(all)] : [b]));
+  const flat = all(blocks);
+  it('reads every heading of docs/features.md, with ids panels can link to', () => {
+    const ids = flat.filter((b) => b.k === 'h').map((b) => (b as { id: string }).id);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const id of ['commands', 'power', 'controller', 'swerve-drive', 'path-analysis', '2-1-why-did-the-robot-brown-out-the-power-view'])
+      expect(ids).toContain(id);
+  });
+  it('keeps code blocks inside list items, and the tables', () => {
+    const java = flat.filter((b) => b.k === 'code' && b.lang === 'java');
+    expect(java.length).toBeGreaterThanOrEqual(3);
+    expect(java.some((b) => (b as { text: string }).text.includes('SmartDashboard.putData(CommandScheduler.getInstance())'))).toBe(true);
+    const shortcuts = flat.find((b) => b.k === 'table' && b.head[0] === 'Key');
+    expect(shortcuts && shortcuts.k === 'table' && shortcuts.rows.length).toBeGreaterThanOrEqual(20);
+  });
+  it('nests numbered steps and the paragraphs inside them', () => {
+    const md = '1. one\n2. two\n   1. two a\n   2. two b\n\n   more about two\n3. three\n\nafter';
+    const [list, after] = parseMarkdown(md);
+    expect(list.k === 'list' && list.ordered && list.items.length).toBe(3);
+    if (list.k !== 'list') return;
+    expect(list.items[1].map((b) => b.k)).toEqual(['p', 'list', 'p']);
+    expect(after).toEqual({ k: 'p', text: 'after' });
+    expect(blockText([list])).toContain('more about two');
+  });
+  it('reads inline code, bold, italic and links as text', () => {
+    expect(parseInline('a `b*c` **d** *e* [f](http://x)')).toEqual([
+      { text: 'a ' },
+      { text: 'b*c', code: true },
+      { text: ' ' },
+      { text: 'd', strong: true },
+      { text: ' ' },
+      { text: 'e', em: true },
+      { text: ' ' },
+      { text: 'f' },
+    ]);
+  });
+  it('lets italic and bold wrap code', () => {
+    expect(parseInline('*see `Help.tsx` here*')).toEqual([
+      { text: 'see ', em: true },
+      { text: 'Help.tsx', code: true },
+      { text: ' here', em: true },
+    ]);
   });
 });

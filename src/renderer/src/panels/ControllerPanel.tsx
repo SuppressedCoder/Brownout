@@ -17,6 +17,7 @@ import { controllerKeys, decodeButtons, decodePov, PAD_MAPS, type ControllerKeys
 import { T, type Palette } from '../lib/theme';
 import { withAlpha } from '../lib/colors';
 import { Toolbar, ToolSelect, ToolGroup } from '../components/Toolbar';
+import { GuideLink } from '../components/Guide';
 
 const keyCache = new WeakMap<FieldInfo[], Map<number, ControllerKeys | null>>();
 function keysFor(log: LogEntry, index: number): ControllerKeys | null {
@@ -104,6 +105,7 @@ export function ControllerPanel({ id }: { id: string }) {
           <div className="panel-placeholder">
             No controller {settings.index} in the open logs. AdvantageKit records controllers by itself; with WPILib DataLogManager, call{' '}
             <code>DriverStation.startDataLog(DataLogManager.getLog())</code> in the robot code.
+            <GuideLink section="controller" />
           </div>
         )}
         {logs.length === 0 && <div className="panel-placeholder">Open a log to see the driver controller.</div>}
