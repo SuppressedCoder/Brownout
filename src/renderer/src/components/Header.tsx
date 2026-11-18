@@ -293,9 +293,9 @@ export function Header() {
         <ToolButton
           low
           icon="help"
-          text="Shortcuts and tips"
+          text="Guide, shortcuts and tips"
           onClick={() => uiStore.set({ helpOpen: true })}
-          title={`Shortcuts and tips (${keyHint('help')})`}
+          title={`The guide, shortcuts and tips (${keyHint('help')}; the guide: ${keyHint('guide')})`}
         />
       </OverflowRow>
     </div>

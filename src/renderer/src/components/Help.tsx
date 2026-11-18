@@ -1,4 +1,8 @@
-/** Shortcuts & tips. The keyboard list is generated from the action registry, so it always matches the keybinds. */
+/**
+ * The help sheet: the guide (docs/features.md, components/Guide.tsx) and the
+ * shortcuts and tips. The keyboard list is generated from the action
+ * registry, so it always matches the keybinds.
+ */
 import { uiStore } from '../state/ui';
 import { settingsStore } from '../state/settings';
 import { useStore } from '../state/store';
@@ -6,11 +10,13 @@ import { ACTIONS, type ActionGroup } from '../lib/actions';
 import { formatCombo, keyFor } from '../lib/keybinds';
 import { openSettings } from '../state/ui';
 import { Icon } from './Icon';
+import { Guide } from './Guide';
 
 export function Help() {
   useStore(settingsStore, (s) => s.keybinds);
   const moveTime = useStore(settingsStore, (s) => s.panelsMoveTime);
   const close = () => uiStore.set({ helpOpen: false });
+  const tab = useStore(uiStore, (s) => s.helpTab);
   const groups: ActionGroup[] = ['Playback', 'Navigate', 'Zoom', 'Files & layout', 'View', 'Robot'];
   const mouse: [string, string][] = [
     ['Timeline: press / drag in the lanes', 'Place / scrub the cursor; it snaps to mode changes and bookmarks (hold Alt: no snap)'],
@@ -46,9 +52,21 @@ export function Help() {
   ];
   return (
     <div className="modal-backdrop" onMouseDown={close}>
-      <div className="modal help" role="dialog" aria-label="Shortcuts and tips" onMouseDown={(e) => e.stopPropagation()}>
+      <div
+        className={`modal help${tab === 'guide' ? ' guide-open' : ''}`}
+        role="dialog"
+        aria-label="Guide, shortcuts and tips"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
         <div className="modal-head">
-          <strong>Shortcuts &amp; tips</strong>
+          <span className="help-tabs">
+            <button className={`tool-btn${tab === 'guide' ? ' active' : ''}`} onClick={() => uiStore.set({ helpTab: 'guide' })} data-testid="help-tab-guide">
+              Guide
+            </button>
+            <button className={`tool-btn${tab === 'keys' ? ' active' : ''}`} onClick={() => uiStore.set({ helpTab: 'keys' })} data-testid="help-tab-keys">
+              Shortcuts &amp; tips
+            </button>
+          </span>
           <span className="toolbar-spacer" />
           <button
             className="link-btn"
@@ -63,45 +81,49 @@ export function Help() {
             <Icon name="close" size={12} />
           </button>
         </div>
-        <div className="scroll help-body">
-          <div className="help-cols">
-            <div>
-              {groups.map((g) => (
-                <div key={g}>
-                  <h4>{g}</h4>
-                  <table className="kv">
-                    <tbody>
-                      {ACTIONS.filter((a) => a.group === g).map((a) => (
-                        <tr key={a.id}>
-                          <th className="mono">{formatCombo(keyFor(a))}</th>
-                          <td>{a.label}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ))}
-            </div>
-            <div>
-              <h4>Mouse</h4>
-              <table className="kv">
-                <tbody>
-                  {mouse.map(([k, v]) => (
-                    <tr key={k}>
-                      <th>{k}</th>
-                      <td>{v}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <h4>Comparing logs</h4>
-              <p className="hint">
-                “Auto start” puts t = 0 at the start of autonomous in every log, so matches from different days line up. “Wall clock” lines up files from the
-                same match. In a graph, choose overlay (one color per log, one line style per field), stacked lanes, or A − B.
-              </p>
+        {tab === 'guide' ? (
+          <Guide />
+        ) : (
+          <div className="scroll help-body">
+            <div className="help-cols">
+              <div>
+                {groups.map((g) => (
+                  <div key={g}>
+                    <h4>{g}</h4>
+                    <table className="kv">
+                      <tbody>
+                        {ACTIONS.filter((a) => a.group === g).map((a) => (
+                          <tr key={a.id}>
+                            <th className="mono">{formatCombo(keyFor(a))}</th>
+                            <td>{a.label}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
+              </div>
+              <div>
+                <h4>Mouse</h4>
+                <table className="kv">
+                  <tbody>
+                    {mouse.map(([k, v]) => (
+                      <tr key={k}>
+                        <th>{k}</th>
+                        <td>{v}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <h4>Comparing logs</h4>
+                <p className="hint">
+                  “Auto start” puts t = 0 at the start of autonomous in every log, so matches from different days line up. “Wall clock” lines up files from the
+                  same match. In a graph, choose overlay (one color per log, one line style per field), stacked lanes, or A − B.
+                </p>
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

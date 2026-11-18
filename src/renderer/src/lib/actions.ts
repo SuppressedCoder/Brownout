@@ -12,6 +12,7 @@ import { openViaDialog } from './files';
 import { exportCsv } from './exportCsv';
 import { formatTime } from '@core/alignment';
 import { grid } from '../components/Grid';
+import { openGuide } from '../components/Guide';
 import { capturePanel } from './capture';
 import { exportMatchReport } from './report';
 
@@ -133,7 +134,8 @@ export const ACTIONS: Action[] = [
   { id: 'maximizePanel', label: 'Maximize / restore the active panel', group: 'View', defaultKey: 'Ctrl+Enter', run: () => grid.toggleMaximize() },
   { id: 'potato', label: 'Toggle Potato mode', group: 'View', defaultKey: 'Ctrl+Shift+P', run: togglePotato },
   { id: 'settings', label: 'Settings', group: 'View', defaultKey: 'Ctrl+,', run: () => openSettings() },
-  { id: 'help', label: 'Shortcuts and tips', group: 'View', defaultKey: '?', run: () => uiStore.set((s) => ({ helpOpen: !s.helpOpen })) },
+  { id: 'help', label: 'Guide, shortcuts and tips', group: 'View', defaultKey: '?', run: () => uiStore.set((s) => ({ helpOpen: !s.helpOpen })) },
+  { id: 'guide', label: 'Open the guide', group: 'View', defaultKey: 'F1', run: () => openGuide() },
 
   { id: 'power', label: 'Power view', group: 'Robot', defaultKey: 'P', run: () => showView('power') },
   { id: 'robot', label: 'Robot profile…', group: 'Robot', defaultKey: '', run: () => openSettings('robot') },

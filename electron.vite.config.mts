@@ -8,6 +8,8 @@ const version = (JSON.parse(readFileSync(resolve(import.meta.dirname, 'package.j
 const alias = {
   '@core': resolve(import.meta.dirname, 'src/core'),
   '@renderer': resolve(import.meta.dirname, 'src/renderer/src'),
+  // the in-app guide is docs/features.md, bundled as text
+  '@docs': resolve(import.meta.dirname, 'docs'),
 };
 
 export default defineConfig({

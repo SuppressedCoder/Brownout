@@ -22,6 +22,7 @@ import { withAlpha } from '../lib/colors';
 import { drawCursor, drawTimeAxis, fitText } from '../lib/draw';
 import { Toolbar, ToolButton, ToolSelect, ToolGroup } from '../components/Toolbar';
 import { FieldPicker } from '../components/FieldPicker';
+import { GuideLink } from '../components/Guide';
 import { Icon } from '../components/Icon';
 import { shortKey } from '../lib/fields';
 
@@ -201,6 +202,8 @@ export function CommandsPanel({ id }: { id: string }) {
             onCommandFinish and onCommandInterrupt.
             <br />
             If the log keeps the list under another name, pick it with Source field.
+            <br />
+            <GuideLink section="commands">The code for both, in the guide</GuideLink>
           </div>
         </div>
       ) : (

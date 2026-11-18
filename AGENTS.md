@@ -58,6 +58,6 @@ npm run dev       # run the app
 - **New derived field:** add it in `summarize()` with `addDerived('/Brownout/...')`; it appears in the field tree like any field.
 - **New key source (logger):** extend the tables in `robotState.ts` / `roles.ts` and add a fixture.
 
-**Keep `docs/features.md` complete.** Every feature you add or change gets its line there, in plain words for a team member. A gesture, a modifier key or a shortcut also goes in the help sheet's tips (`components/Help.tsx`; the shortcut list there is generated from `ACTIONS`). Hidden features nobody is told about might as well not exist.
+**Keep `docs/features.md` complete.** It is also the guide inside the app (help sheet, Guide tab, F1), so it ships with every build. Every feature you add or change gets its line there, in plain words for a team member. A panel that needs data the log lacks should link to its section with `<GuideLink section="...">` (`components/Guide.tsx`; the section id is the heading as a slug). The guide's Markdown is read by `core/markdown.ts`, which handles headings, paragraphs, nested lists, code blocks, tables and inline code, bold, italic and links; keep to those. A gesture, a modifier key or a shortcut also goes in the help sheet's tips (`components/Help.tsx`; the shortcut list there is generated from `ACTIONS`). Hidden features nobody is told about might as well not exist.
 
 Commit after each step that works. Keep `npm run check` green.

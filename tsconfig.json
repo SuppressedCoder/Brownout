@@ -14,7 +14,7 @@
     "resolveJsonModule": true,
     "noEmit": true,
     "types": ["vite/client"],
-    "paths": { "@core/*": ["./src/core/*"], "@renderer/*": ["./src/renderer/src/*"] }
+    "paths": { "@core/*": ["./src/core/*"], "@renderer/*": ["./src/renderer/src/*"], "@docs/*": ["./docs/*"] }
   },
   "include": ["src/renderer/src/**/*", "src/core/**/*", "src/preload/api.ts"]
 }

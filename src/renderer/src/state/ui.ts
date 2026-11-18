@@ -55,6 +55,11 @@ export interface UiState {
   settingsOpen: boolean;
   settingsTab: SettingsTab;
   helpOpen: boolean;
+  /** Which tab of the help sheet shows: the guide (docs/features.md) or the shortcuts and tips. */
+  helpTab: 'guide' | 'keys';
+  /** A section of the guide to show (its heading as a slug), bumped with guideEpoch so the same one can be asked for twice. */
+  guideSection: string | null;
+  guideEpoch: number;
   /** Bumped to ask the transport bar to focus its go-to-time box. */
   gotoEpoch: number;
   /** The power-subsystems editor is open, for this robot profile id. */
@@ -73,6 +78,9 @@ export const uiStore = createStore<UiState>({
   settingsOpen: false,
   settingsTab: 'general',
   helpOpen: false,
+  helpTab: 'guide',
+  guideSection: null,
+  guideEpoch: 0,
   gotoEpoch: 0,
   subsystemsFor: null,
   camerasFor: null,

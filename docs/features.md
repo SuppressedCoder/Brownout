@@ -4,6 +4,8 @@
 
 Last brought up to date: 2026-11-17 (after pull request #14).
 
+**This guide is inside the app:** press **F1**, or **?** and the **Guide** tab. It has a contents list and a search box, and panels that are missing data link straight to their part of it ("How to log this, in the guide").
+
 **Where to start:** section 2 walks through the common jobs (why did it brown out, watch the video next to the field, compare matches, check an auto, check vision, tune a mechanism, see what the code was doing). Section 8 explains every panel: what it is for, what the robot has to log for it, and how to use it.
 
 ---
@@ -126,7 +128,7 @@ From left to right:
 - **View switch: Panels, Video, Power** (Ctrl+1, Ctrl+2, Ctrl+3). See section 9.
 - **Align:** how logs are lined up (section 4).
 - **Preset menu** and **Add panel** (only in the Panels view, section 7).
-- **Potato mode**, **Settings** (Ctrl+,), **Shortcuts and tips** (?).
+- **Potato mode**, **Settings** (Ctrl+,), and the **help** button: this guide and the shortcuts and tips (?, or F1 for the guide).
 
 On a narrow window the labels turn into icons and the less-used controls move into a three-dot menu at the end of the row. The same is true of every toolbar in the app.
 
@@ -524,7 +526,8 @@ A preset says where panels go; a **robot profile** describes the robot and appli
 | P | Power view |
 | Ctrl+Shift+P | Potato mode |
 | Ctrl+, | Settings |
-| ? | Shortcuts and tips |
+| ? | Guide, shortcuts and tips |
+| F1 | Open the guide |
 
 **In the video sync view only:** Space play/pause; Left/Right one frame; Shift+Left/Right one second; comma/period five seconds; `=` / `-` zoom the video timeline; Enter apply; Esc cancel.
 
