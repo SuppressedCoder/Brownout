@@ -30,7 +30,7 @@ Written 2026-11-16 by the model that built the app so far, and last updated 2026
 4. `docs/implementation-status.md`: what is built, item by item, with honest notes on what is partial.
 5. The spec in `docs/` that matches your task (listed in `AGENTS.md`).
 
-State in one paragraph: the app works end to end, every planned feature from the last two plans is built, and v0.5.1 is released with installers for all three operating systems. `npm run check` (57 unit tests) and `npm run uitest` (258 checks) pass, in CI on GitHub (Linux) and on the owner's Windows 11 computer. **One real robot log has been checked:** CURIE Q89 from the 2026 Championship, a DataLogManager log with no AdvantageKit and no battery voltage. It exposed ten real bugs, all fixed in v0.5.1; section 6 lists them. Everything that needs battery voltage or PDH currents has still only been run on the synthetic demo logs. Getting more real logs is the first job (section 7).
+State in one paragraph: the app works end to end, every planned feature from the last two plans is built, and v0.5.1 is released with installers for all three operating systems. `npm run check` (57 unit tests) and `npm run uitest` (259 checks) pass, in CI on GitHub (Linux) and on the owner's Windows 11 computer. **One real robot log has been checked:** CURIE Q89 from the 2026 Championship, a DataLogManager log with no AdvantageKit and no battery voltage. It exposed ten real bugs, all fixed in v0.5.1; section 6 lists them. Everything that needs battery voltage or PDH currents has still only been run on the synthetic demo logs. Getting more real logs is the first job (section 7).
 
 Work on a branch and open a pull request; don't push to `main` unless the owner asks.
 
@@ -186,7 +186,7 @@ A **preset** says where the panels go. A **robot profile** describes the robot a
 
 ### Drawing
 
-Canvas panels draw outside React through `useCanvas(draw, stores, deps)` in `lib/useCanvas.ts`. React renders toolbars, tables and menus. Moving the cursor must never re-render a React tree. Anything drawn against time uses per-pixel min/max decimation (`src/core/decimate.ts`).
+Canvas panels draw outside React through `useCanvas(draw, stores, deps)` in `lib/useCanvas.ts`. React renders toolbars, tables and menus. Moving the cursor must never re-render a React tree. Anything drawn against time uses per-pixel min/max decimation (`src/core/decimate.ts`). The ref `useCanvas` returns is a callback ref: a panel may show a message first and its canvas later (Commands and Statistics do while logs load), and the hook sets up each new canvas. It used to set up only at mount, so after a relaunch those panels stayed blank until re-added. Effects that need the element list `ref.current` in their deps.
 
 ### Roles, not keys
 

@@ -16,7 +16,7 @@
 > - **real field pictures**, a **compact view** for small screens, and **custom icons instead of emoji**
 > - layouts as **presets**, a **"potato mode"** for slow laptops, and the rule that **only the timeline moves time**
 >
-> **What this means if you use it:** treat Brownout like any software you did not write and cannot fully vouch for. It has automated tests (57 unit tests and 258 checks that drive the real app) and has been checked against one real robot log, but AI-written code can have mistakes that tests miss. Before making a decision at an event, such as retiring a battery or blaming a mechanism for a brownout, check the conclusion against the raw data in the graphs.
+> **What this means if you use it:** treat Brownout like any software you did not write and cannot fully vouch for. It has automated tests (57 unit tests and 259 checks that drive the real app) and has been checked against one real robot log, but AI-written code can have mistakes that tests miss. Before making a decision at an event, such as retiring a battery or blaming a mechanism for a brownout, check the conclusion against the raw data in the graphs.
 
 A desktop log viewer and **log comparison tool** for FRC robots. It opens WPILOG files (`.wpilog`) written by WPILib DataLogManager, Epilogue, AdvantageKit, DogLog and the 2027 FIRST Driver Station, and is built to look at **several logs at once**: matches from different days line up at auto start (or first enable, teleop start, wall clock, or by hand), and every panel can overlay, stack or difference them.
 
@@ -40,7 +40,7 @@ Other commands:
 |---|---|
 | `npm run check` | strict typecheck (app, pure core, node scripts) + unit tests |
 | `npm run smoke` | builds, launches the app headless with two demo logs, screenshots to `smoke/screenshot.png` |
-| `npm run uitest` | drives the real app with Playwright: menus, presets, dialogs, time control, zoom, settings, keybinds, session restore, icons, compact view, multi-select, robot profiles, power by subsystem, field pictures, swerve, cameras, controller, commands, the robot editor, video sync, the match report (258 checks; screenshots in `smoke/ui-*.png`) |
+| `npm run uitest` | drives the real app with Playwright: menus, presets, dialogs, time control, zoom, settings, keybinds, session restore, icons, compact view, multi-select, robot profiles, power by subsystem, field pictures, swerve, cameras, controller, commands, the robot editor, video sync, the match report (259 checks; screenshots in `smoke/ui-*.png`) |
 | `npm run bench` | times the reader on every fixture against the 3 s / 100 MB budget |
 | `npm run reallog` | opens every log in `fixtures/local/` (git-ignored; put a team's real logs there) in the real app, applies each preset, and writes screenshots, the match report and a summary to `smoke/real-*` |
 | `npm run build` / `npm run dist` | production build / installers via electron-builder (see below) |

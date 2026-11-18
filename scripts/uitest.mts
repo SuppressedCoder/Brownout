@@ -1121,6 +1121,28 @@ async function main() {
     }
     check('clicking a command run moves the cursor to its start', jumped !== null, String(jumped));
   }
+  // the panel shows a message while it has no logs, then a new canvas when they come (as on every relaunch):
+  // the new canvas must be sized, drawn and clickable
+  {
+    const sized = () =>
+      page.evaluate(
+        `(() => { const c = document.querySelector('[data-testid=commands-chart] canvas'); if (!c) return 'no canvas'; const w = Math.floor(c.parentElement.getBoundingClientRect().width * (window.devicePixelRatio || 1)); return c.width === w && w > 0 ? 'ok' : c.width + ' vs ' + w; })()`,
+      ) as Promise<string>;
+    const ids = await state<string[]>(page, 's.sessionStore.get().logs.map(l => l.id)');
+    await page.evaluate(`(() => { const s = window.__brownout; s.sessionStore.set(st => ({ logs: st.logs.map(l => ({ ...l, visible: false })) })); })()`);
+    await page.waitForTimeout(300);
+    const hiddenMsg = await page.locator('.commands-panel .panel-placeholder').count();
+    await page.evaluate(`(() => { const s = window.__brownout; s.sessionStore.set(st => ({ logs: st.logs.map(l => ({ ...l, visible: true })) })); })()`);
+    await page.waitForTimeout(500);
+    check(
+      'a commands panel that first had no logs draws once they arrive (as after a relaunch)',
+      ids.length === 2 &&
+        hiddenMsg === 1 &&
+        (await sized()) === 'ok' &&
+        Number(await page.locator('[data-testid=commands-chart]').getAttribute('data-rows')) === cmdRows,
+      `${hiddenMsg} / ${await sized()}`,
+    );
+  }
 
   console.log('Robot appearance');
   await page.locator('[data-testid=settings-btn]').click();

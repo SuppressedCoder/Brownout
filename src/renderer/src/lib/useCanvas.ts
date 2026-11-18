@@ -4,10 +4,15 @@
  * a subscribed store changes or a series arrives.
  *
  * - Canvases with no size (panels in hidden tabs) don't draw at all.
+ * - The canvas may come and go: a panel that shows a message until its data
+ *   arrives (Commands, Statistics) renders its canvas later. The returned ref
+ *   is a callback ref that also has `.current`, and the setup runs again for
+ *   each new canvas. (It used to run once, at mount: a canvas that appeared
+ *   after the logs loaded, as on every relaunch, was never drawn.)
  * - Potato mode: 1x resolution and at most ~30 draws per second.
  * - Every draw's cost is reported to the frame monitor (lib/perf.ts).
  */
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Store } from '../state/store';
 import { client } from '../worker/client';
 import { settingsStore } from '../state/settings';
@@ -28,12 +33,19 @@ export function useCanvas(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   stores: Store<any>[],
   deps: unknown[] = [],
-): React.RefObject<HTMLCanvasElement | null> {
-  const ref = useRef<HTMLCanvasElement | null>(null);
+): CanvasRef {
+  const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
+  const ref = useMemo(() => {
+    const r = ((node: HTMLCanvasElement | null) => {
+      r.current = node;
+      setCanvas(node);
+    }) as CanvasRef;
+    r.current = null;
+    return r;
+  }, []);
   const drawRef = useRef(draw);
   drawRef.current = draw;
   useEffect(() => {
-    const canvas = ref.current;
     if (!canvas) return;
     let raf = 0;
     let timer = 0;
@@ -103,6 +115,9 @@ export function useCanvas(
       if (timer) window.clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
+  }, [...deps, canvas]);
   return ref;
 }
+
+/** A ref for a canvas drawn by useCanvas: pass it as `ref`, read the element from `.current`. */
+export type CanvasRef = { current: HTMLCanvasElement | null } & ((node: HTMLCanvasElement | null) => void);
