@@ -190,6 +190,15 @@ code {
 .chip-btn:hover {
   color: var(--strong);
 }
+/* next to the log chips, outside their scrolling row so it stays in reach with many logs */
+.chip-btn.close-all-logs {
+  flex: none;
+  gap: 4px;
+  white-space: nowrap;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
 
 /* Panels */
 .grid-host {

@@ -125,6 +125,7 @@ From left to right:
   - **click the name** to make it the *primary* log (the alignment reference, and the log whose modes shade the graphs). The primary log has a star;
   - **the close button** closes it;
   - **hover** for the file name, size and alignment offset.
+- **Close all**, next to the log chips when two or more logs are open, closes every log at once (also in the File menu).
 - **View switch: Panels, Video, Power** (Ctrl+1, Ctrl+2, Ctrl+3). See section 9.
 - **Align:** how logs are lined up (section 4).
 - **Preset menu** and **Add panel** (only in the Panels view, section 7).

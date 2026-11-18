@@ -99,7 +99,12 @@ interface SavedSession {
   logs: { path: string; manualOffset: number }[];
 }
 
+let saving = false;
+let restored = false;
+
 export function startSessionSaving(): void {
+  if (saving) return;
+  saving = true;
   let last = '';
   const save = () => {
     const s = sessionStore.get();
@@ -118,9 +123,15 @@ export function startSessionSaving(): void {
   sessionStore.subscribe(save);
 }
 
-/** Reopen the logs from the last session (desktop app only). */
+/**
+ * Reopen the logs from the last session (desktop app only). Runs once: in
+ * development React runs the startup effect twice, and restoring twice used
+ * to open every log twice, doubling the session on each relaunch. A path
+ * already open, or listed twice in the saved session, is opened once.
+ */
 export async function restoreSession(): Promise<void> {
-  if (!window.brownout || !settingsStore.get().restoreSession) return;
+  if (restored || !window.brownout || !settingsStore.get().restoreSession) return;
+  restored = true;
   let saved: SavedSession;
   try {
     const raw = localStorage.getItem(SESSION_KEY);
@@ -129,9 +140,12 @@ export async function restoreSession(): Promise<void> {
   } catch {
     return;
   }
-  if (!saved.logs?.length) return;
-  const failed = await openSources(saved.logs.map((l) => ({ path: l.path })));
-  for (const l of saved.logs) {
+  if (!Array.isArray(saved.logs)) return;
+  const open = new Set(sessionStore.get().logs.map((l) => l.path));
+  const logs = saved.logs.filter((l) => typeof l?.path === 'string' && !open.has(l.path) && (open.add(l.path), true));
+  if (!logs.length) return;
+  const failed = await openSources(logs.map((l) => ({ path: l.path })));
+  for (const l of logs) {
     if (!l.manualOffset) continue;
     const entry = sessionStore.get().logs.find((x) => x.path === l.path);
     if (entry) setManualOffset(entry.id, l.manualOffset);
