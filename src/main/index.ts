@@ -8,6 +8,10 @@
  *   --demo                                   open the bundled demo logs
  *   --preset <id>                            apply a workspace preset after opening (quick, power, autos, compare, code, replay)
  *   --screenshot <out.png>                   save a screenshot once the UI reports ready, then quit
+ *
+ * One app runs per data folder. Launching it again opens another window in
+ * the running app (with any logs named on that command line); windows share
+ * their logs and time through the 'sync' channel (renderer lib/windowSync.ts).
  */
 import { app, BrowserWindow, Menu, dialog, ipcMain, shell, clipboard, ClipboardItem, protocol } from 'electron';
 import { readFile, writeFile, readdir, mkdir, rm, stat } from 'node:fs/promises';
@@ -17,19 +21,34 @@ import { randomUUID } from 'node:crypto';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 
 const isDev = !app.isPackaged && !!process.env.ELECTRON_RENDERER_URL;
-const openAtStart: string[] = [];
 let screenshotPath: string | null = null;
 let presetAtStart: string | null = null;
 let demoAtStart = false;
+/** The logs named on a command line: `--open <file>` or a bare `.wpilog` path, resolved against that launch's folder. */
+function logsInArgs(argv: string[], cwd = process.cwd()): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--open' && argv[i + 1]) out.push(resolve(cwd, argv[++i]));
+    else if (argv[i] === '--screenshot' || argv[i] === '--preset') i++;
+    else if (argv[i].endsWith('.wpilog')) out.push(resolve(cwd, argv[i]));
+  }
+  return out;
+}
+const openAtStart = logsInArgs(process.argv);
 for (let i = 0; i < process.argv.length; i++) {
-  if (process.argv[i] === '--open' && process.argv[i + 1]) openAtStart.push(resolve(process.argv[++i]));
-  else if (process.argv[i] === '--screenshot' && process.argv[i + 1]) screenshotPath = resolve(process.argv[++i]);
+  if (process.argv[i] === '--screenshot' && process.argv[i + 1]) screenshotPath = resolve(process.argv[++i]);
   else if (process.argv[i] === '--preset' && process.argv[i + 1]) presetAtStart = process.argv[++i];
   else if (process.argv[i] === '--demo') demoAtStart = true;
-  else if (process.argv[i].endsWith('.wpilog')) openAtStart.push(resolve(process.argv[i]));
 }
 
 if (process.env.BROWNOUT_USER_DATA) app.setPath('userData', process.env.BROWNOUT_USER_DATA);
+// One app per data folder: two copies would fight over the saved settings and session (the second
+// would start empty and save nothing). A second launch opens a window in this one instead.
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) app.quit();
+app.on('second-instance', (_e, argv, cwd) => {
+  if (app.isReady()) createWindow(logsInArgs(argv, cwd));
+});
 // Headless CI machines have no GPU; Chromium's GPU compositor can then fail to capture the page
 // ("UnknownVizError"). Software rendering is slower but always works.
 if (process.env.BROWNOUT_DISABLE_GPU) app.disableHardwareAcceleration();
@@ -59,7 +78,12 @@ async function registerVideo(path: string): Promise<{ path: string; name: string
 const recent: string[] = [];
 /** Every log file this run has read for the page: the only folders whose videos may be listed for it. */
 const readPaths = new Set<string>();
-let win: BrowserWindow | null = null;
+/** Every open window, in the order they opened. The first is the primary: only it saves the layout and the session. */
+const windows: BrowserWindow[] = [];
+/** The window a menu command or a file from the OS goes to. */
+const activeWindow = (): BrowserWindow | undefined => BrowserWindow.getFocusedWindow() ?? windows[0];
+/** The window that sent an IPC request (dialogs open on top of it). */
+const senderWindow = (e: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent): BrowserWindow => BrowserWindow.fromWebContents(e.sender) ?? windows[0];
 
 async function loadFile(path: string) {
   const data = await readFile(path);
@@ -69,10 +93,14 @@ async function loadFile(path: string) {
   return { name: basename(path), path, data: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) };
 }
 
-function createWindow() {
-  win = new BrowserWindow({
-    width: 1500,
-    height: 920,
+function createWindow(files: string[] = []) {
+  const first = windows.length === 0;
+  // a new window opens a little below and right of the one in front, so both show
+  const prev = activeWindow()?.getBounds();
+  const win = new BrowserWindow({
+    width: prev?.width ?? 1500,
+    height: prev?.height ?? 920,
+    ...(prev ? { x: prev.x + 32, y: prev.y + 32 } : {}),
     minWidth: 900,
     minHeight: 600,
     backgroundColor: '#15171c',
@@ -83,9 +111,28 @@ function createWindow() {
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
+      // playback runs in the window where Play was pressed and the other windows follow it, so it
+      // must keep time while that window is minimized or hidden behind the others
+      backgroundThrottling: false,
     },
   });
-  win.once('ready-to-show', () => win?.show());
+  const id = win.webContents.id;
+  windows.push(win);
+  win.once('ready-to-show', () => win.show());
+  win.on('focus', buildMenu);
+  win.on('page-title-updated', () => setTimeout(buildMenu));
+  win.on('closed', () => {
+    const wasPrimary = windows[0] === win;
+    windows.splice(windows.indexOf(win), 1);
+    if (wasPrimary) windows[0]?.webContents.send('window-primary');
+    // playback ran in this window: stop it in the others, which only followed it
+    const t = shared.time as { playing?: boolean } | undefined;
+    if (timeFrom === id && t?.playing) {
+      shared.time = { ...t, playing: false };
+      for (const w of windows) w.webContents.send('sync', 'time', shared.time);
+    }
+    buildMenu();
+  });
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http')) shell.openExternal(url);
     return { action: 'deny' };
@@ -94,20 +141,21 @@ function createWindow() {
   else win.loadFile(join(__dirname, '../renderer/index.html'));
 
   win.webContents.on('did-finish-load', async () => {
-    if (openAtStart.length) {
-      const files = await Promise.all(openAtStart.map(loadFile));
-      win?.webContents.send('open-files', files);
+    if (files.length) {
+      const opened = await Promise.all(files.map(loadFile));
+      win.webContents.send('open-files', opened);
     }
-    if (demoAtStart) send('demo');
+    if (first && demoAtStart) win.webContents.send('command', 'demo');
   });
+  buildMenu();
 }
 
 function send(command: string) {
-  win?.webContents.send('command', command);
+  activeWindow()?.webContents.send('command', command);
 }
 
-async function pickLogPaths(): Promise<string[]> {
-  const r = await dialog.showOpenDialog(win!, {
+async function pickLogPaths(owner: BrowserWindow): Promise<string[]> {
+  const r = await dialog.showOpenDialog(owner, {
     title: 'Open WPILOG files',
     filters: [
       { name: 'WPILib data logs', extensions: ['wpilog'] },
@@ -118,8 +166,8 @@ async function pickLogPaths(): Promise<string[]> {
   return r.canceled ? [] : r.filePaths;
 }
 
-async function openLogDialog() {
-  return Promise.all((await pickLogPaths()).map(loadFile));
+async function openLogDialog(owner: BrowserWindow) {
+  return Promise.all((await pickLogPaths(owner)).map(loadFile));
 }
 
 /**
@@ -199,6 +247,22 @@ function buildMenu() {
       ],
     },
     {
+      label: 'Window',
+      submenu: [
+        { label: 'New window (same logs and time)', click: action('newWindow') },
+        { type: 'separator' },
+        ...windows.map((w, i): Electron.MenuItemConstructorOptions => ({
+          label: `${i + 1}  ${w.getTitle()}`,
+          type: 'checkbox',
+          checked: w === BrowserWindow.getFocusedWindow(),
+          click: () => {
+            if (w.isMinimized()) w.restore();
+            w.focus();
+          },
+        })),
+      ],
+    },
+    {
       label: 'Help',
       submenu: [{ label: 'Shortcuts & tips', click: action('help') }],
     },
@@ -206,10 +270,10 @@ function buildMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-ipcMain.handle('open-log-dialog', () => openLogDialog());
+ipcMain.handle('open-log-dialog', (e) => openLogDialog(senderWindow(e)));
 ipcMain.handle('read-file', (_e, path: string) => loadFile(path));
 ipcMain.handle('get-recent', () => recent);
-ipcMain.handle('pick-log-paths', () => pickLogPaths());
+ipcMain.handle('pick-log-paths', (e) => pickLogPaths(senderWindow(e)));
 ipcMain.handle('startup-info', () => ({ cliFiles: openAtStart.length > 0 || demoAtStart }));
 ipcMain.handle('open-demo-logs', async () => {
   // Demo logs ship in the renderer bundle (src/renderer/public/demo -> out/renderer/demo).
@@ -217,19 +281,19 @@ ipcMain.handle('open-demo-logs', async () => {
   const names = (await readdir(dir).catch(() => [] as string[])).filter((n) => n.endsWith('.wpilog')).sort();
   return Promise.all(names.map((n) => loadFile(join(dir, n))));
 });
-ipcMain.handle('save-file', async (_e, defaultName: string, data: string | Uint8Array, filters?: { name: string; extensions: string[] }[]) => {
-  const r = await dialog.showSaveDialog(win!, { defaultPath: defaultName, filters });
+ipcMain.handle('save-file', async (e, defaultName: string, data: string | Uint8Array, filters?: { name: string; extensions: string[] }[]) => {
+  const r = await dialog.showSaveDialog(senderWindow(e), { defaultPath: defaultName, filters });
   if (r.canceled || !r.filePath) return null;
   await writeFile(r.filePath, typeof data === 'string' ? data : Buffer.from(data));
   return r.filePath;
 });
-ipcMain.handle('open-json-dialog', async (_e, title: string) => {
-  const r = await dialog.showOpenDialog(win!, { title, filters: [{ name: 'JSON', extensions: ['json'] }], properties: ['openFile'] });
+ipcMain.handle('open-json-dialog', async (e, title: string) => {
+  const r = await dialog.showOpenDialog(senderWindow(e), { title, filters: [{ name: 'JSON', extensions: ['json'] }], properties: ['openFile'] });
   if (r.canceled || !r.filePaths[0]) return null;
   return { name: basename(r.filePaths[0]), text: await readFile(r.filePaths[0], 'utf8') };
 });
-ipcMain.handle('pick-video', async () => {
-  const r = await dialog.showOpenDialog(win!, {
+ipcMain.handle('pick-video', async (e) => {
+  const r = await dialog.showOpenDialog(senderWindow(e), {
     title: 'Choose a match video',
     filters: [{ name: 'Video', extensions: Object.keys(VIDEO_MIME).map((e) => e.slice(1)) }],
     properties: ['openFile'],
@@ -253,8 +317,8 @@ async function getVideoFolder(): Promise<string | null> {
   }
 }
 ipcMain.handle('get-video-folder', () => getVideoFolder());
-ipcMain.handle('pick-video-folder', async () => {
-  const r = await dialog.showOpenDialog(win!, { title: 'Choose the folder where you keep match videos', properties: ['openDirectory'] });
+ipcMain.handle('pick-video-folder', async (e) => {
+  const r = await dialog.showOpenDialog(senderWindow(e), { title: 'Choose the folder where you keep match videos', properties: ['openDirectory'] });
   if (r.canceled || !r.filePaths[0]) return null;
   await writeFile(videoFolderFile(), JSON.stringify({ path: r.filePaths[0] }));
   return r.filePaths[0];
@@ -278,8 +342,8 @@ ipcMain.handle('list-videos-near', async (_e, logPath: unknown) => {
 });
 
 // Match report: the page's HTML is printed to a PDF in a hidden window with scripting off
-ipcMain.handle('export-report', async (_e, html: string, defaultName: string) => {
-  const r = await dialog.showSaveDialog(win!, { defaultPath: defaultName, filters: [{ name: 'PDF', extensions: ['pdf'] }] });
+ipcMain.handle('export-report', async (e, html: string, defaultName: string) => {
+  const r = await dialog.showSaveDialog(senderWindow(e), { defaultPath: defaultName, filters: [{ name: 'PDF', extensions: ['pdf'] }] });
   if (r.canceled || !r.filePath) return null;
   const w = new BrowserWindow({ show: false, width: 900, height: 1200, webPreferences: { sandbox: true, javascript: false, contextIsolation: true } });
   try {
@@ -292,8 +356,8 @@ ipcMain.handle('export-report', async (_e, html: string, defaultName: string) =>
   }
 });
 
-ipcMain.handle('capture', async (_e, rect: { x: number; y: number; width: number; height: number }, mode: 'copy' | 'save', defaultName: string) => {
-  if (!win) return null;
+ipcMain.handle('capture', async (e, rect: { x: number; y: number; width: number; height: number }, mode: 'copy' | 'save', defaultName: string) => {
+  const win = senderWindow(e);
   const img = await win.webContents.capturePage(rect);
   if (mode === 'copy') {
     const png = img.toPNG();
@@ -321,8 +385,8 @@ async function readCustomField(id: string) {
     mime: IMAGE_MIME[extname(imageName).toLowerCase()] ?? 'image/png',
   };
 }
-ipcMain.handle('import-field', async () => {
-  const r = await dialog.showOpenDialog(win!, {
+ipcMain.handle('import-field', async (e) => {
+  const r = await dialog.showOpenDialog(senderWindow(e), {
     title: 'Load a field picture (WPILib / PathWeaver field JSON)',
     filters: [{ name: 'Field JSON', extensions: ['json'] }],
     properties: ['openFile'],
@@ -364,9 +428,11 @@ ipcMain.handle('remove-field', async (_e, id: string) => {
   if (!/^custom-[a-z0-9-]+$/.test(id)) return;
   await rm(join(fieldsDir(), id), { recursive: true, force: true });
 });
-ipcMain.on('renderer-ready', async (_e, info: { logs: number; fields: number }) => {
-  if (presetAtStart) send(`preset:${presetAtStart}`);
-  if (!screenshotPath || !win) return;
+ipcMain.on('renderer-ready', async (e, info: { logs: number; fields: number }) => {
+  const win = senderWindow(e);
+  if (presetAtStart) win.webContents.send('command', `preset:${presetAtStart}`);
+  presetAtStart = null;
+  if (!screenshotPath) return;
   // Let canvases paint a couple of frames first.
   await new Promise((r) => setTimeout(r, 2000));
   // The compositor may not have a frame ready yet: try a few times, and never hang if it can't
@@ -392,7 +458,24 @@ ipcMain.on('renderer-ready', async (_e, info: { logs: number; fields: number }) 
   app.quit();
 });
 
+// Windows share their logs and time (renderer lib/windowSync.ts): each change goes to the other
+// windows, and the latest of each kind is kept here for a window that opens later.
+const shared: Record<string, unknown> = {};
+/** The window that last sent the time: the one playing, while playback runs. */
+let timeFrom = -1;
+ipcMain.on('sync', (e, kind: unknown, data: unknown) => {
+  if (kind !== 'session' && kind !== 'time') return;
+  shared[kind] = data;
+  if (kind === 'time') timeFrom = e.sender.id;
+  for (const w of windows) if (w.webContents.id !== e.sender.id) w.webContents.send('sync', kind, data);
+});
+ipcMain.handle('window-info', (e) => ({ primary: windows[0]?.webContents.id === e.sender.id, shared }));
+ipcMain.handle('new-window', () => {
+  createWindow();
+});
+
 app.whenReady().then(() => {
+  if (!gotLock) return;
   // Serve picked videos with byte ranges, which is what lets the player seek
   protocol.handle('brownout-media', async (req) => {
     const token = basename(new URL(req.url).pathname).replace(/\.[a-z0-9]+$/i, '');
@@ -421,8 +504,7 @@ app.whenReady().then(() => {
     return new Response(Readable.toWeb(createReadStream(path, { start, end })) as ReadableStream, { status, headers });
   });
 
-  buildMenu();
-  createWindow();
+  createWindow(openAtStart);
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -432,6 +514,7 @@ app.on('window-all-closed', () => {
 });
 app.on('open-file', (e, path) => {
   e.preventDefault();
-  if (win) loadFile(path).then((f) => win?.webContents.send('open-files', [f]));
+  const win = activeWindow();
+  if (win) loadFile(path).then((f) => win.webContents.send('open-files', [f]));
   else openAtStart.push(path);
 });

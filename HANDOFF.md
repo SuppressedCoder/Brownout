@@ -30,7 +30,7 @@ Written 2026-11-16 by the model that built the app so far, and last updated 2026
 4. `docs/implementation-status.md`: what is built, item by item, with honest notes on what is partial.
 5. The spec in `docs/` that matches your task (listed in `AGENTS.md`).
 
-State in one paragraph: the app works end to end, every planned feature from the last two plans is built, and v0.5.1 is released with installers for all three operating systems. `npm run check` (57 unit tests) and `npm run uitest` (259 checks) pass, in CI on GitHub (Linux) and on the owner's Windows 11 computer. **One real robot log has been checked:** CURIE Q89 from the 2026 Championship, a DataLogManager log with no AdvantageKit and no battery voltage. It exposed ten real bugs, all fixed in v0.5.1; section 6 lists them. Everything that needs battery voltage or PDH currents has still only been run on the synthetic demo logs. Getting more real logs is the first job (section 7).
+State in one paragraph: the app works end to end, every planned feature from the last two plans is built, and v0.5.1 is released with installers for all three operating systems. `npm run check` (57 unit tests) and `npm run uitest` (273 checks) pass, in CI on GitHub (Linux) and on the owner's Windows 11 computer. **One real robot log has been checked:** CURIE Q89 from the 2026 Championship, a DataLogManager log with no AdvantageKit and no battery voltage. It exposed ten real bugs, all fixed in v0.5.1; section 6 lists them. Everything that needs battery voltage or PDH currents has still only been run on the synthetic demo logs. Getting more real logs is the first job (section 7).
 
 Work on a branch and open a pull request; don't push to `main` unless the owner asks.
 
@@ -72,7 +72,7 @@ From `docs/implementation-status.md` (rows marked ✗ or ◐) and `docs/frc-logg
 - Derived expressions in graphs
 - Timeline: drag to reorder tracks, a findings track
 - Export a filtered WPILOG, SVG export
-- Workspace tabs, pop-out windows
+- Workspace tabs (several windows on the same logs and time are built: `lib/windowSync.ts`)
 - Code signing and auto-update
 - The 2027 field picture and tag map (after kickoff)
 
@@ -187,6 +187,8 @@ A **preset** says where the panels go. A **robot profile** describes the robot a
 ### Drawing
 
 Canvas panels draw outside React through `useCanvas(draw, stores, deps)` in `lib/useCanvas.ts`. React renders toolbars, tables and menus. Moving the cursor must never re-render a React tree. Anything drawn against time uses per-pixel min/max decimation (`src/core/decimate.ts`). The ref `useCanvas` returns is a callback ref: a panel may show a message first and its canvas later (Commands and Statistics do while logs load), and the hook sets up each new canvas. It used to set up only at mount, so after a relaunch those panels stayed blank until re-added. Effects that need the element list `ref.current` in their deps.
+
+**Several windows.** One app runs per data folder (`requestSingleInstanceLock`); starting it again, or Ctrl+Shift+N, opens another window. Every window is a full copy of the page with its own worker, and `lib/windowSync.ts` keeps them in step through the main process: the logs (by path, with order, offsets, visibility, colors), alignment mode, match or whole log, bookmarks, and time (cursor, view, selection, playback). Each window keeps its own view, layout, sidebar and timeline size. Playback runs only in the window where Play was pressed; the others show the cursor it sends. Its clock uses animation frames plus a 40 ms timer, and windows are made with `backgroundThrottling: false`, so it keeps time while minimized. Time goes between windows at most 60 times a second, and `useCanvas` draws at most 60 times a second: on the owner's fast screen two windows redrawing every graph about 220 times a second starved the match video's hardware decoder, which fell behind, and its catch-up seek never finished (the video froze until the other window closed). Measured with a 1080p video: before, 4 frames shown in 8 s; after, every frame and no seeks. Only the first window (the primary) saves the layout and the session; the next one takes over when it closes. Settings, presets, profiles and video syncs reload from storage when another window writes them (`storage` events). If you add session state that should match across windows, add it to `SharedSession` there; anything that walks every log should expect logs to arrive and leave without a user action.
 
 ### Roles, not keys
 
@@ -366,7 +368,7 @@ Each of these is a self-contained feature. Follow the matching recipe in `AGENTS
 | Download from the robot, Driver Station folder watching, a log library | main process work; requirements doc section 8, P1 |
 | Export a filtered WPILOG | `src/core/wpilog/writer.ts` exists and is used by tests and the demo generator |
 | SVG export, workspace tabs | see the status table |
-| Pop-out windows | dockview's `addPopoutGroup` keeps one JavaScript context, so stores and loaded logs are shared. **Blocker:** dockview 8.9 refuses `file:` pop-out pages (`UNSAFE_POPOUT_PROTOCOLS`), and the installed app loads from `file://`. Serving the app from its own scheme changes the `localStorage` origin, so settings, presets, profiles and video syncs need moving first (moving them to files under userData would also fix the 5 MB profile limit, section 8). Also: `setWindowOpenHandler` denies all windows; `useCanvas`, `MenuButton`'s portal and the shortcut listener assume the main window; the playback clock runs on the main window's animation frames, which slow down when it is minimized. Do it after the installers have been tried on real machines. |
+| Pop-out windows (one panel in its own window) | Done differently: **several full windows** share logs and time through the main process (`lib/windowSync.ts`, the `sync` channel in `src/main/index.ts`); each reads the logs itself. What follows is the note on dockview's own pop-outs, still unbuilt. dockview's `addPopoutGroup` keeps one JavaScript context, so stores and loaded logs are shared. **Blocker:** dockview 8.9 refuses `file:` pop-out pages (`UNSAFE_POPOUT_PROTOCOLS`), and the installed app loads from `file://`. Serving the app from its own scheme changes the `localStorage` origin, so settings, presets, profiles and video syncs need moving first (moving them to files under userData would also fix the 5 MB profile limit, section 8). Also: `setWindowOpenHandler` denies all windows; `useCanvas`, `MenuButton`'s portal and the shortcut listener assume the main window; the playback clock runs on the main window's animation frames, which slow down when it is minimized. Do it after the installers have been tried on real machines. |
 | Draw the cursor on its own layer | every hover or cursor move redraws each graph, field and the timeline from scratch (`GraphPanel.tsx`, the cursor is drawn last in the same pass); caching the plot and redrawing only the cursor would cut the per-frame cost during playback and scrubbing |
 | Code signing and auto-update | `docs/brownout-tech-stack.md` section 6 |
 

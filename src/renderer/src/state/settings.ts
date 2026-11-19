@@ -70,6 +70,9 @@ function load(): Settings {
 
 export const settingsStore = createStore<Settings>(load());
 
+// another window saved them: take its copy, so this window never writes an older one back
+if (typeof window !== 'undefined') window.addEventListener('storage', (e) => e.key === KEY && settingsStore.set(load()));
+
 settingsStore.subscribe((s) => {
   try {
     localStorage.setItem(KEY, JSON.stringify(s));

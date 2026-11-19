@@ -50,6 +50,16 @@ export interface BrownoutApi {
   clearVideoFolder(): Promise<void>;
   /** Print report HTML to a PDF through a save dialog. Returns the saved path, or null if cancelled. */
   exportReport(html: string, defaultName: string): Promise<string | null>;
+  /** Whether this is the primary window (the one that saves the layout and session), and the latest shared logs and time. */
+  windowInfo(): Promise<{ primary: boolean; shared: { session?: unknown; time?: unknown } }>;
+  /** Send this window's logs ('session') or time ('time') to the other windows. */
+  syncSend(kind: 'session' | 'time', data: unknown): void;
+  /** Logs or time from another window. */
+  onSync(cb: (kind: 'session' | 'time', data: unknown) => void): () => void;
+  /** This window became the primary (the first one closed). */
+  onPrimary(cb: () => void): () => void;
+  /** Open another window on the same logs and time. */
+  newWindow(): Promise<void>;
 }
 
 export interface CustomFieldFile {

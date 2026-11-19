@@ -46,6 +46,19 @@ const api: BrownoutApi = {
   pickVideoFolder: () => ipcRenderer.invoke('pick-video-folder') as Promise<string | null>,
   clearVideoFolder: () => ipcRenderer.invoke('clear-video-folder') as Promise<void>,
   exportReport: (html, defaultName) => ipcRenderer.invoke('export-report', html, defaultName) as Promise<string | null>,
+  windowInfo: () => ipcRenderer.invoke('window-info') as Promise<{ primary: boolean; shared: { session?: unknown; time?: unknown } }>,
+  syncSend: (kind, data) => ipcRenderer.send('sync', kind, data),
+  onSync: (cb) => {
+    const handler = (_e: unknown, kind: 'session' | 'time', data: unknown) => cb(kind, data);
+    ipcRenderer.on('sync', handler);
+    return () => ipcRenderer.removeListener('sync', handler);
+  },
+  onPrimary: (cb) => {
+    const handler = () => cb();
+    ipcRenderer.on('window-primary', handler);
+    return () => ipcRenderer.removeListener('window-primary', handler);
+  },
+  newWindow: () => ipcRenderer.invoke('new-window') as Promise<void>,
 };
 
 contextBridge.exposeInMainWorld('brownout', api);

@@ -7,6 +7,7 @@ import { grid, type SavedLayout } from '../components/Grid';
 import { panelStore } from '../state/panels';
 import { sessionStore, SIDEBAR_MIN } from '../state/session';
 import { timeStore } from '../state/time';
+import { isPrimaryWindow } from './windowSync';
 
 const KEY = 'brownout.layout.v1';
 const PREFS = 'brownout.prefs.v1';
@@ -28,6 +29,8 @@ export interface Prefs {
 
 let timer: number | undefined;
 function scheduleSave() {
+  // only the primary window saves its layout: a second window's layout is its own, for this run
+  if (!isPrimaryWindow()) return;
   if (timer) window.clearTimeout(timer);
   timer = window.setTimeout(() => {
     try {

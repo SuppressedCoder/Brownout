@@ -255,6 +255,31 @@ export function removeLog(id: string): void {
   }));
 }
 
+/** A log as the windows share it (lib/windowSync.ts): by path, with what the user set on it. */
+export interface SharedLog {
+  path: string;
+  manualOffset: number;
+  visible: boolean;
+  colorIndex: number;
+}
+
+/**
+ * Put the open logs in the shared order, with the shared offsets, visibility and colors. Logs
+ * not in the list must already be closed; logs without a path (not shared) stay at the end.
+ */
+export function arrangeSharedLogs(list: SharedLog[]): void {
+  sessionStore.set((st) => {
+    const byPath = new Map(st.logs.filter((l) => l.path).map((l) => [l.path!, l]));
+    const colors = settingsStore.get().logColors;
+    const logs: LogEntry[] = [];
+    for (const s of list) {
+      const l = byPath.get(s.path);
+      if (l) logs.push({ ...l, manualOffset: s.manualOffset, visible: s.visible, colorIndex: s.colorIndex, color: colors[s.colorIndex] ?? l.color });
+    }
+    return { logs: recomputeOffsets([...logs, ...st.logs.filter((l) => !l.path)], st.alignMode) };
+  });
+}
+
 export function closeAll(): void {
   for (const l of sessionStore.get().logs) client.close(l.id);
   sessionStore.set({ logs: [], bookmarks: [], selectedKeys: [] });

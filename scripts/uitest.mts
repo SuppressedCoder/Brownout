@@ -10,6 +10,7 @@
  */
 import { _electron as electron, type ElectronApplication, type Page } from 'playwright-core';
 import { execSync, spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { existsSync, mkdirSync, rmSync, readFileSync, writeFileSync, copyFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -1866,6 +1867,109 @@ async function main() {
   }
   await page.waitForTimeout(700);
   check('a log listed twice in the saved session opens once', (await state<number>(page, 's.sessionStore.get().logs.length')) === 3);
+
+  // ------------------------------------------------------------------ several windows
+  console.log('Several windows');
+  {
+    const paths = (p: Page) => state<string[]>(p, 's.sessionStore.get().logs.map(l => l.path)');
+    const loaded = async (p: Page, n: number) => {
+      for (let i = 0; i < 100; i++) {
+        if (await state<boolean>(p, `!!s && s.sessionStore.get().logs.length === ${n} && s.sessionStore.get().loadingItems.length === 0`).catch(() => false))
+          return true;
+        await p.waitForTimeout(200);
+      }
+      return false;
+    };
+    const errors2: string[] = [];
+    // session 2 ended in Video review, closing before that was saved: start from the panels
+    await page.keyboard.press('Control+1');
+    await page.waitForTimeout(300);
+    const opened = app.waitForEvent('window');
+    await page.locator('.timeline').first().hover();
+    await page.keyboard.press('Control+Shift+N');
+    const page2 = await opened;
+    page2.on('pageerror', (e) => errors2.push(String(e)));
+    page2.on('console', (m) => {
+      if (m.type() === 'error') errors2.push(m.text());
+    });
+    await page2.waitForSelector('.header');
+    check(
+      'Ctrl+Shift+N opens a second window on the same logs, in the same order',
+      (await loaded(page2, 3)) && JSON.stringify(await paths(page2)) === JSON.stringify(await paths(page)),
+      `${(await paths(page2)).length} logs`,
+    );
+    await page2.waitForTimeout(500);
+    const t1 = await state<{ cursor: number; view: [number, number] }>(page, '({ cursor: s.timeStore.get().cursor, view: s.timeStore.get().view })');
+    const t2 = await state<{ cursor: number; view: [number, number] }>(page2, '({ cursor: s.timeStore.get().cursor, view: s.timeStore.get().view })');
+    check('...and the same cursor and view', JSON.stringify(t1) === JSON.stringify(t2), `${JSON.stringify(t1)} vs ${JSON.stringify(t2)}`);
+    // moving the cursor in one window moves it in the other
+    const [v0, v1] = t1.view;
+    const want = v0 + (v1 - v0) * 0.37;
+    await page.evaluate(`window.__brownout.timeStore.set({ cursor: ${want} })`);
+    await page2.waitForTimeout(300);
+    check('the cursor moved in one window moves in the other', Math.abs((await state<number>(page2, 's.timeStore.get().cursor')) - want) < 1e-9);
+    // play in the first, pause from the second (with the buttons: an earlier part of this test rebinds Play to P)
+    await page.locator('[data-testid=play-btn]').first().click();
+    await page.waitForTimeout(700);
+    const following = await state<{ playing: boolean; cursor: number }>(page2, '({ playing: s.timeStore.get().playing, cursor: s.timeStore.get().cursor })');
+    check('playing in one window plays in the other', following.playing && following.cursor > want + 0.2, JSON.stringify(following));
+    // the playing window minimized (watching the other one): playback keeps time
+    const minimize = (on: boolean) =>
+      app.evaluate(({ BrowserWindow }, on) => {
+        const ws = BrowserWindow.getAllWindows();
+        const first = ws.reduce((a, b) => (a.webContents.id < b.webContents.id ? a : b));
+        if (on) first.minimize();
+        else first.restore();
+      }, on);
+    await minimize(true);
+    await page2.waitForTimeout(300);
+    const m0 = await state<number>(page2, 's.timeStore.get().cursor');
+    await page2.waitForTimeout(1000);
+    const advanced = (await state<number>(page2, 's.timeStore.get().cursor')) - m0;
+    check('playback keeps time while the playing window is minimized', advanced > 0.8 && advanced < 1.3, `${advanced.toFixed(2)} s in 1 s`);
+    await minimize(false);
+    await page.waitForTimeout(300);
+    await page2.locator('[data-testid=play-btn]').first().click();
+    await page.waitForTimeout(400);
+    const stopped = await state<number>(page, 's.timeStore.get().cursor');
+    await page.waitForTimeout(400);
+    check(
+      'pausing in the other window stops it',
+      !(await state<boolean>(page, 's.timeStore.get().playing')) && (await state<number>(page, 's.timeStore.get().cursor')) === stopped,
+    );
+    // each window has its own view
+    await page2.keyboard.press('Control+2');
+    await page2.waitForTimeout(400);
+    check(
+      'each window shows its own view (Video review in one, panels in the other)',
+      (await state<string>(page2, 's.sessionStore.get().view')) === 'video' &&
+        (await state<string>(page, 's.sessionStore.get().view')) === 'panels' &&
+        (await page2.title()).includes('Video review'),
+      await page2.title(),
+    );
+    // closing a log in one window closes it in the other; the offset set in one shows in the other
+    await page2.keyboard.press('Control+1');
+    const firstName = await state<string>(page2, 's.sessionStore.get().logs[0].name');
+    await page2.locator(`.log-chip button[aria-label="Close ${firstName}"]`).click();
+    check('closing a log in one window closes it in the other', await loaded(page, 2), `${(await paths(page)).length} logs`);
+    // a second launch opens a window in the running app instead of a copy that starts empty
+    const electronPath = createRequire(import.meta.url)('electron') as string;
+    const env2: NodeJS.ProcessEnv = { ...process.env, BROWNOUT_USER_DATA: userData };
+    delete env2.ELECTRON_RUN_AS_NODE;
+    const second = spawnSync(electronPath, [root, '--no-sandbox'], { env: env2, timeout: 30000 });
+    for (let i = 0; i < 50 && app.windows().length < 3; i++) await page.waitForTimeout(200);
+    const page3 = app.windows().find((w) => w !== page && w !== page2);
+    check(
+      'launching the app again opens a window in the running one, on the same logs',
+      second.status === 0 && app.windows().length === 3 && !!page3 && (await loaded(page3, 2)),
+      `exit ${second.status}, ${app.windows().length} windows`,
+    );
+    await page3?.close();
+    await page2.close();
+    await page.waitForTimeout(300);
+    check('no renderer errors in the second window', errors2.length === 0, errors2.slice(0, 3).join(' | '));
+    check('the first window keeps its logs when the others close', (await state<number>(page, 's.sessionStore.get().logs.length')) === 2);
+  }
   await page.locator('[data-testid=close-all-logs]').click();
   await page.waitForTimeout(300);
   check(

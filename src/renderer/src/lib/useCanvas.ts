@@ -27,6 +27,12 @@ export interface DrawContext {
 }
 
 const POTATO_FRAME_MS = 33;
+/**
+ * At most 60 draws a second, also on 144 and 240 Hz screens. Drawing at the screen's rate gains
+ * little here and costs GPU time the match video needs: with two windows drawing at 240 Hz the
+ * video's hardware decoder fell behind, and its catch-up seek never finished.
+ */
+const FRAME_MS = 1000 / 60 - 1;
 
 export function useCanvas(
   draw: (dc: DrawContext) => void,
@@ -78,15 +84,13 @@ export function useCanvas(
     };
     const schedule = () => {
       if (raf || timer || w === 0 || h === 0) return;
-      if (settingsStore.get().potato) {
-        const wait = POTATO_FRAME_MS - (performance.now() - lastPaint);
-        if (wait > 1) {
-          timer = window.setTimeout(() => {
-            timer = 0;
-            raf = requestAnimationFrame(paint);
-          }, wait);
-          return;
-        }
+      const wait = (settingsStore.get().potato ? POTATO_FRAME_MS : FRAME_MS) - (performance.now() - lastPaint);
+      if (wait > 1) {
+        timer = window.setTimeout(() => {
+          timer = 0;
+          raf = requestAnimationFrame(paint);
+        }, wait);
+        return;
       }
       raf = requestAnimationFrame(paint);
     };
