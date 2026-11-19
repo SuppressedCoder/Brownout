@@ -119,6 +119,13 @@ export const ACTIONS: Action[] = [
   },
   { id: 'matchReport', label: 'Match report (PDF)…', group: 'Files & layout', defaultKey: '', run: () => void exportMatchReport() },
   { id: 'closeAll', label: 'Close all logs', group: 'Files & layout', defaultKey: '', run: () => closeAll() },
+  {
+    id: 'newWindow',
+    label: 'New window on the same logs and time',
+    group: 'View',
+    defaultKey: 'Ctrl+Shift+N',
+    run: () => void window.brownout?.newWindow(),
+  },
 
   {
     id: 'toggleSidebar',

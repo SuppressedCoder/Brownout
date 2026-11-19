@@ -204,10 +204,25 @@ export function jumpPhase(dir: 1 | -1): void {
   gotoTime(next);
 }
 
-// Playback loop
+// Playback loop. Each step asks for the next animation frame and also sets a short timer, and
+// whichever comes first runs it: in a visible window that is the frame, but a minimized window
+// gets no frames, and with several windows the playing one may be minimized while another shows
+// the match (main turns off background throttling so the timer keeps time there).
 let rafId = 0;
+let timerId = 0;
 let lastTs = 0;
+const FALLBACK_MS = 40;
+function scheduleTick(): void {
+  stopClock();
+  rafId = requestAnimationFrame(tick);
+  timerId = window.setTimeout(() => tick(performance.now()), FALLBACK_MS);
+}
+function stopClock(): void {
+  cancelAnimationFrame(rafId);
+  clearTimeout(timerId);
+}
 function tick(ts: number) {
+  stopClock();
   const t = timeStore.get();
   if (!t.playing) return;
   const dt = lastTs ? Math.min(0.25, (ts - lastTs) / 1000) : 0;
@@ -234,7 +249,17 @@ function tick(ts: number) {
     if (v) patch.view = v;
   }
   timeStore.set(patch);
-  rafId = requestAnimationFrame(tick);
+  scheduleTick();
+}
+
+/**
+ * Time from another window (lib/windowSync.ts). Playback runs only in the window where Play was
+ * pressed; a window that is told to play just shows the cursor it is sent. Told to stop, the
+ * playing window stops its clock.
+ */
+export function applySharedTime(patch: Partial<TimeState>): void {
+  if (patch.playing === false) stopClock();
+  timeStore.set(patch);
 }
 
 export function setPlaying(playing: boolean): void {
@@ -253,10 +278,10 @@ export function setPlaying(playing: boolean): void {
       if (v) timeStore.set({ view: v });
     }
     lastTs = 0;
-    rafId = requestAnimationFrame(tick);
+    scheduleTick();
   } else {
     timeStore.set({ playing: false });
-    cancelAnimationFrame(rafId);
+    stopClock();
   }
 }
 

@@ -25,6 +25,7 @@ import { VideoSyncModal } from './components/VideoSync';
 import { VideoReview, PowerView } from './components/Views';
 import { startVideoOffers } from './lib/videoOffer';
 import { addCustomField } from './lib/fieldAssets';
+import { startWindowSync, whenPrimary } from './lib/windowSync';
 
 /** Below this window width the sidebar hides itself. */
 const NARROW = 980;
@@ -65,16 +66,24 @@ export function App() {
     const offFiles = window.brownout?.onOpenFiles((files) => void openLogs(files));
     const offCmd = window.brownout?.onCommand((cmd) => void runCommand(cmd));
     void (async () => {
-      // Reopen last session's logs unless files were passed on the command line.
+      // A second window takes the logs and time of the others; the first reopens last session's
+      // logs, unless files were passed on the command line.
+      const joined = await startWindowSync();
       const info = await window.brownout?.getStartupInfo();
-      if (info && !info.cliFiles) await restoreSession();
-      startSessionSaving();
+      if (!joined && info && !info.cliFiles) await restoreSession();
+      // only the primary window saves the session (the others would save the same)
+      whenPrimary(startSessionSaving);
     })();
     return () => {
       offFiles?.();
       offCmd?.();
     };
   }, []);
+
+  // The window title names the view, so the Window menu and the taskbar tell windows apart
+  useEffect(() => {
+    document.title = view === 'video' ? 'Brownout - Video review' : view === 'power' ? 'Brownout - Power' : 'Brownout';
+  }, [view]);
 
   // First log opened with an empty grid: apply Quick Look. Also report readiness (smoke test).
   useEffect(() => {

@@ -121,6 +121,7 @@ export function startSessionSaving(): void {
     }
   };
   sessionStore.subscribe(save);
+  save();
 }
 
 /**

@@ -396,6 +396,16 @@ Any panel that lacks what it needs says so and how to log it, and Log info & hea
 
 Preset and Add panel only show in the Panels view. The views' own panels are never saved into your layouts or presets.
 
+**Several windows** (Ctrl+Shift+N, the Window menu, or just start Brownout again): another window on the same logs and the same time, for a second monitor. Put Video review in one and your graphs in the other.
+
+- **Shared by all windows:** the open logs, their order, colors, offsets and hidden/shown state, the alignment mode, match or whole log, bookmarks, and time: the cursor, the zoom, the selection and playback. Open, close or line up a log in any window and the others do the same; press Play or Pause in any window.
+- **Each window's own:** its view (Panels, Video review, Power), its panels and layout, the sidebar and the timeline height. The window title names its view, and the **Window** menu lists the windows to switch between.
+- Playback keeps time even when the window you pressed Play in is minimized.
+- Only the first window saves the layout and the session. A later window starts from the saved layout, and what you change in it lasts until you close it. When the first window closes, the next one takes over saving.
+- Settings, presets, robot profiles and video syncs changed in one window reach the others.
+- Each window reads the logs itself, so every extra window uses that memory again.
+- Starting Brownout again while it runs opens a window in the running app (with any logs you started it with), never a second copy: a second copy would start with nothing and save nothing.
+
 ## 10. Things Brownout works out for you
 
 - **Robot state and match info** (enabled, auto, teleop, event, match number, alliance) from whichever logger wrote the file: AdvantageKit, DataLogManager, the 2027 Driver Station.
@@ -526,6 +536,7 @@ A preset says where panels go; a **robot profile** describes the robot and appli
 | Ctrl+1 / Ctrl+2 / Ctrl+3 | Panels / Video review / Power view |
 | P | Power view |
 | Ctrl+Shift+P | Potato mode |
+| Ctrl+Shift+N | New window on the same logs and time |
 | Ctrl+, | Settings |
 | ? | Guide, shortcuts and tips |
 | F1 | Open the guide |
@@ -580,4 +591,5 @@ On this computer only (nothing is sent anywhere):
 
   A robot profile export is the way to move a setup to another computer.
 - **The app's data folder:** custom field pictures, and the chosen videos folder.
+- With several windows open, only the first one saves the layout and the session (section 9).
 - Logs and videos stay where they are; Brownout remembers their paths. If a video moves, the panel asks for it again and keeps the sync.

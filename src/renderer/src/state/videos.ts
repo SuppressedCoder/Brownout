@@ -72,6 +72,9 @@ function load(): Record<string, VideoEntry> {
 
 export const videoStore = createStore<VideoState>({ byLog: load(), urls: {} });
 
+// another window saved them: take its copy, so this window never writes an older one back
+if (typeof window !== 'undefined') window.addEventListener('storage', (e) => e.key === KEY && videoStore.set({ byLog: load() }));
+
 let saved = videoStore.get().byLog;
 videoStore.subscribe((s) => {
   if (s.byLog === saved) return;

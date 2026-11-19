@@ -44,6 +44,9 @@ function loadUser(): UserPreset[] {
 
 export const presetStore = createStore<PresetState>({ user: loadUser(), active: null, modified: false, hasPanels: false });
 
+// another window saved its presets: take its list, so this window never writes an older one back
+if (typeof window !== 'undefined') window.addEventListener('storage', (e) => e.key === PRESETS_KEY && presetStore.set({ user: loadUser() }));
+
 let baseline: string | null = null;
 let applying = false;
 let checkTimer = 0;

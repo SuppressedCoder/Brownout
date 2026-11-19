@@ -249,6 +249,9 @@ function load(): ProfilesState {
 
 export const profileStore = createStore<ProfilesState>(load());
 
+// another window saved them: take its copy, so this window never writes an older one back
+if (typeof window !== 'undefined') window.addEventListener('storage', (e) => e.key === KEY && profileStore.set(load()));
+
 profileStore.subscribe((s) => {
   try {
     localStorage.setItem(KEY, JSON.stringify(s));
