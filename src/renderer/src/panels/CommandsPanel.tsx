@@ -153,7 +153,8 @@ export function CommandsPanel({ id }: { id: string }) {
       el.removeEventListener('mousemove', onMove);
       el.removeEventListener('click', onClick);
     };
-  }, [ref, id]);
+    // again when the canvas appears: it is not there while the panel shows a message instead
+  }, [ref.current, id]);
 
   return (
     <div className="panel commands-panel">
