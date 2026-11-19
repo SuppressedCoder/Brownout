@@ -1850,6 +1850,29 @@ async function main() {
   await page.keyboard.press('Control+1');
   await page.waitForTimeout(300);
   check('no renderer errors after restore', errors.length === 0, errors.slice(0, 3).join(' | '));
+  // a saved session that lists each log twice (as the doubled sessions of `npm run dev` did) must reopen each once
+  await page.evaluate(
+    `(() => { const k = 'brownout.session.v1'; const s = JSON.parse(localStorage.getItem(k)); s.logs = [...s.logs, ...s.logs]; localStorage.setItem(k, JSON.stringify(s)); })()`,
+  );
+  await app.close();
+
+  // ------------------------------------------------------------------ session 3
+  console.log('Session 3: a saved session with each log twice');
+  ({ app, page, errors } = await launch([]));
+  // wait for loading to finish however many logs it opens, so a regression fails here instead of timing out
+  for (let i = 0; i < 100; i++) {
+    if (await state<boolean>(page, '!!s && s.sessionStore.get().logs.length >= 3 && s.sessionStore.get().loadingItems.length === 0').catch(() => false)) break;
+    await page.waitForTimeout(200);
+  }
+  await page.waitForTimeout(700);
+  check('a log listed twice in the saved session opens once', (await state<number>(page, 's.sessionStore.get().logs.length')) === 3);
+  await page.locator('[data-testid=close-all-logs]').click();
+  await page.waitForTimeout(300);
+  check(
+    'the Close all button in the header closes every log, then goes away',
+    (await state<number>(page, 's.sessionStore.get().logs.length')) === 0 && (await page.locator('[data-testid=close-all-logs]').count()) === 0,
+  );
+  check('no renderer errors in session 3', errors.length === 0, errors.slice(0, 3).join(' | '));
   await app.close();
 
   console.log(`\n${passed} passed, ${failures.length} failed`);

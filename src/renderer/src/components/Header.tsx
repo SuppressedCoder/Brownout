@@ -5,7 +5,7 @@
  * help. On a narrow window (or in compact view) the labels drop to icons and
  * the less-used controls move into the overflow menu.
  */
-import { sessionStore, removeLog, setAlignMode, setLogVisible, makePrimary, type LoadingItem } from '../state/session';
+import { sessionStore, removeLog, closeAll, setAlignMode, setLogVisible, makePrimary, type LoadingItem } from '../state/session';
 import { useStore } from '../state/store';
 import { settingsStore } from '../state/settings';
 import { uiStore, openSettings } from '../state/ui';
@@ -124,6 +124,12 @@ export function Header() {
           </span>
         ))}
       </span>
+      {logs.length > 1 && (
+        <button className="chip-btn close-all-logs" onClick={() => closeAll()} title="Close all logs" data-testid="close-all-logs">
+          <Icon name="close" size={10} />
+          <span>Close all</span>
+        </button>
+      )}
       <OverflowRow className="hdr-right" compact={compact} testId="header-more" moreTitle="More: alignment, Potato mode, shortcuts">
         <ToolSpacer />
         <ToolGroup className="view-switch">
