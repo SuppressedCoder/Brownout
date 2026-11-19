@@ -509,7 +509,7 @@ A preset says where panels go; a **robot profile** describes the robot and appli
 - **Keybinds:** every shortcut can be rebound. Click a key and press the new one; a key already in use moves to the new command, and the old one is unbound. Reset one or all.
 - **Demo logs.**
 
-**Potato mode** (Ctrl+Shift+P) is for slow laptops: 30 draws a second at 1x resolution, coarser graphs, no hover readouts in other panels, short trails, tables that update when you stop moving.
+**Potato mode** (Ctrl+Shift+P) is for slow laptops: 30 draws a second at 1x resolution, coarser graphs, no hover readouts in other panels, short trails, tables that update when you stop moving. Without it, panels draw at most 60 times a second, also on 144 Hz and faster screens, which leaves the graphics card free for the match video.
 
 ## 15. Keyboard shortcuts (defaults; all rebindable)
 

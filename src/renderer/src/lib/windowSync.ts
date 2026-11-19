@@ -98,10 +98,34 @@ function timeChanged(): void {
   const json = JSON.stringify(lastTime);
   if (json === sharedTime) return;
   sharedTime = json;
-  window.brownout?.syncSend('time', lastTime);
+  pendingTime = lastTime;
+  // playback changes the cursor on every step; the other windows draw at most 60 times a second
+  // (useCanvas), so send at most that often, and always the newest
+  const wait = SEND_MS - (performance.now() - lastSent);
+  if (wait > 0) {
+    if (!sendTimer) sendTimer = window.setTimeout(sendTime, wait);
+    return;
+  }
+  sendTime();
+}
+
+const SEND_MS = 1000 / 60;
+let lastSent = 0;
+let sendTimer = 0;
+let pendingTime: SharedTime | null = null;
+function sendTime(): void {
+  clearTimeout(sendTimer);
+  sendTimer = 0;
+  lastSent = performance.now();
+  if (pendingTime) window.brownout?.syncSend('time', pendingTime);
+  pendingTime = null;
 }
 
 function takeTime(t: SharedTime): void {
+  // what this window was about to send is older than what it was just sent
+  clearTimeout(sendTimer);
+  sendTimer = 0;
+  pendingTime = null;
   // listeners run inside the store update: without this the window would send the time straight
   // back, and the playing window would keep jumping back to the cursor it sent a moment ago
   taking = true;
