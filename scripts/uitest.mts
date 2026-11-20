@@ -961,12 +961,68 @@ async function main() {
     dialog.showSaveDialog = (async () => ({ canceled: false, filePath: p })) as never;
     dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [p] })) as never;
   }, profilePath);
+  // the robot profile lives in Robot setup, its own view; Settings keeps only app-wide settings
   await page.locator('[data-testid=settings-btn]').click();
-  await page.locator('.settings-tab', { hasText: 'Robot' }).click();
-  await page.waitForSelector('[data-testid=robot-settings]');
-  check('the Robot page shows the profile’s subsystems', (await page.locator('[data-testid=robot-settings] .subsys-card').count()) === 4);
-  check('...and which profile each open log uses', (await page.locator('[data-testid=robot-settings] .setting-row select').count()) >= 2);
-  await page.screenshot({ path: resolve(outDir, 'ui-settings-robot.png') });
+  await page.waitForTimeout(200);
+  check(
+    'Settings has no Robot tab any more',
+    (await page.locator('.settings-tab', { hasText: 'Robot' }).count()) === 0 && (await page.locator('.settings-tab').count()) > 0,
+  );
+  await page.keyboard.press('Escape');
+  await page.locator('[data-testid=view-robot]').click();
+  await page.waitForSelector('[data-testid=robot-setup]');
+  await page.locator('[data-testid=setup-tab-power]').click();
+  check('Robot setup shows the profile’s subsystems', (await page.locator('[data-testid=robot-setup] .subsys-card').count()) === 4);
+  await page.locator('[data-testid=setup-tab-logs]').click();
+  check('...and which profile each open log uses', (await page.locator('[data-testid=robot-setup] .rs-body .setting-row select').count()) >= 2);
+  await page.locator('[data-testid=setup-tab-field]').click();
+  await page.screenshot({ path: resolve(outDir, 'ui-robot-setup.png') });
+  // drag the robot's pose onto the field: a menu at the drop point asks what it is
+  {
+    const search = page.locator('[data-testid=field-search-input]');
+    await search.fill('Odometry/Robot');
+    await page.waitForTimeout(200);
+    await page
+      .locator('.tree-row.field[data-key="/RealOutputs/Odometry/Robot"]')
+      .dragTo(page.locator('[data-testid=setup-field]'), { targetPosition: { x: 300, y: 200 } });
+    await page.waitForSelector('[data-testid=drop-menu]');
+    const offered = await page.locator('[data-testid=drop-choice]').allInnerTexts();
+    await page.locator('[data-testid=drop-choice]', { hasText: 'The robot’s position' }).first().click();
+    await page.waitForTimeout(500);
+    check(
+      'dropping a pose on the field asks what it is, and “the robot’s position” sets it in the profile',
+      offered.some((t) => t.includes('The robot’s position')) &&
+        offered.some((t) => t.includes('where it thinks the robot is')) &&
+        (await state<string | undefined>(page, 's.profileStore.get().profiles[0].roleOverrides.robotPose')) === '/RealOutputs/Odometry/Robot' &&
+        ((await page.locator('[data-testid=on-the-field] [data-role=robotPose]').innerText()) ?? '').includes('set here'),
+      offered.join(' | '),
+    );
+    await page.locator('[data-testid=on-the-field] [data-role=robotPose] button', { hasText: 'Clear' }).click();
+    await page.waitForTimeout(400);
+    // tag IDs: offered to the cameras found by name, or a new one; the first change keeps the found ones
+    await search.fill('Camera0/TagIds');
+    await page.waitForTimeout(200);
+    const camsBefore = await state<number>(page, 's.profileStore.get().profiles[0].cameras.length');
+    await page
+      .locator('.tree-row.field[data-key="/Vision/Camera0/TagIds"]')
+      .dragTo(page.locator('[data-testid=setup-field]'), { targetPosition: { x: 260, y: 160 } });
+    await page.waitForSelector('[data-testid=drop-menu]');
+    await page.locator('[data-testid=drop-choice]', { hasText: 'A new camera' }).first().click();
+    await page.waitForTimeout(400);
+    const cams = await state<{ name: string; tagIdsKey?: string }[]>(page, 's.profileStore.get().profiles[0].cameras');
+    check(
+      'dropping tag IDs makes a new camera, keeping the cameras found by name',
+      camsBefore === 0 && cams.length >= 3 && cams[cams.length - 1].tagIdsKey === '/Vision/Camera0/TagIds',
+      JSON.stringify(cams.map((c) => c.name)),
+    );
+    await page.waitForTimeout(600);
+    await page.locator('[data-testid=robot-setup] .rs-tabs').click({ position: { x: 2, y: 2 } });
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(500);
+    check('...and undo takes it back', (await state<number>(page, 's.profileStore.get().profiles[0].cameras.length')) === 0);
+    await search.fill('');
+  }
+  await page.locator('[data-testid=profile-menu]').click();
   await page.locator('[data-testid=profile-export]').click();
   await page.waitForTimeout(400);
   const exportedProfile = existsSync(profilePath)
@@ -976,6 +1032,7 @@ async function main() {
     'export writes the whole profile to one file',
     exportedProfile?.brownoutRobotProfile === 1 && exportedProfile.profile.subsystems.length === 4 && exportedProfile.profile.favorites.length === 1,
   );
+  await page.locator('[data-testid=profile-menu]').click();
   await page.locator('[data-testid=profile-import]').click();
   await page.waitForSelector('.dialog');
   check('importing a profile with the same name asks first', (await page.locator('.dialog-title').innerText()).includes('Replace'));
@@ -990,7 +1047,10 @@ async function main() {
     'open logs keep their profile',
     (await state<string[]>(page, 's.sessionStore.get().logs.map(l => l.profileId)')).every((id, _i, a) => id === a[0]),
   );
-  await page.keyboard.press('Escape');
+  // Robot setup now shows the imported profile; go back to the first one, which the open logs use
+  await page.locator('[data-testid=profile-select]').selectOption({ index: 0 });
+  await page.keyboard.press('Control+1');
+  await page.waitForTimeout(300);
 
   console.log('Field picture and swerve');
   const fieldBox = await page.locator('.field-panel canvas').first().boundingBox();
@@ -1236,8 +1296,8 @@ async function main() {
   }
 
   console.log('Robot appearance');
-  await page.locator('[data-testid=settings-btn]').click();
-  await page.locator('.settings-tab', { hasText: 'Robot' }).click();
+  await page.locator('[data-testid=view-robot]').click();
+  await page.locator('[data-testid=setup-tab-robot]').click();
   await page.locator('[data-testid=edit-robot]').click();
   await page.waitForSelector('[data-testid=robot-editor]');
   await page.locator('[data-testid=add-rect]').click();
@@ -1325,7 +1385,7 @@ async function main() {
     await page.keyboard.press('Control+z');
     await page.waitForTimeout(400);
     const back = await state<{ x: number; y: number }>(page, 's.profileStore.get().profiles[0].layers[0]');
-    check('Ctrl+Z in the robot editor (opened from Settings) undoes the drag', back.x === 0.3 && back.y === 0, JSON.stringify(back));
+    check('Ctrl+Z in the robot editor undoes the drag', back.x === 0.3 && back.y === 0, JSON.stringify(back));
     await page.locator('[data-testid=robot-redo]').click();
     await page.waitForTimeout(400);
     const again = await state<{ x: number; y: number }>(page, 's.profileStore.get().profiles[0].layers[0]');
@@ -1449,7 +1509,8 @@ async function main() {
     await len.blur();
     await page.waitForTimeout(150);
   }
-  await page.keyboard.press('Escape');
+  await page.keyboard.press('Control+1');
+  await page.waitForTimeout(300);
   await page.locator('.dv-default-tab', { hasText: '2D field' }).click();
   await page.evaluate(`window.__brownout.timeStore.set({ cursor: 44 })`);
   await page.waitForTimeout(600);

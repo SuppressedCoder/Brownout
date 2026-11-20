@@ -1,7 +1,7 @@
 /**
  * Power subsystems for a robot profile: name each subsystem and say which
  * motors belong to it. A motor is a current source: a PDH / PDP channel
- * number, or a logged current field. Used inside Settings (Robot) and as a
+ * number, or a logged current field. Used inside Robot setup (Power) and as a
  * dialog from the Power panel.
  */
 import { useEffect, useMemo, useState } from 'react';

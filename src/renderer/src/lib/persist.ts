@@ -88,7 +88,7 @@ export function loadPrefs(): void {
       brownoutThreshold: p.brownoutThreshold ?? 6.75,
       tagVariant: p.tagVariant === 'andymark' ? 'andymark' : 'welded',
       wholeLog: p.wholeLog === true,
-      view: p.view === 'video' || p.view === 'power' ? p.view : 'panels',
+      view: p.view === 'video' || p.view === 'power' || p.view === 'robot' ? p.view : 'panels',
     });
     if (p.timeFormat) timeStore.set({ timeFormat: p.timeFormat as never });
   } catch {
