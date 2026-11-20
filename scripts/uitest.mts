@@ -177,6 +177,45 @@ async function main() {
     await page.screenshot({ path: resolve(outDir, 'ui-field-filter.png') });
     await page.keyboard.press('Escape');
     check('Escape clears the search', (await page.locator('[data-testid=type-chip]').count()) === 0 && (await input.inputValue()) === '');
+    // results that share a folder: the folder once above a box of them, each row only the rest of its name
+    await input.type('power');
+    await page.waitForTimeout(200);
+    const grouped = await page.locator('[data-testid=search-group]').evaluateAll((gs) =>
+      gs.map((g) => ({
+        folder: (g as unknown as { querySelector: (s: string) => { textContent: string } | null }).querySelector('.search-folder bdi')?.textContent ?? '',
+        rows: [
+          ...(
+            g as unknown as {
+              querySelectorAll: (s: string) => Iterable<{ dataset: { key: string }; querySelector: (s: string) => { textContent: string } | null }>;
+            }
+          ).querySelectorAll('.tree-row.field'),
+        ].map((r) => ({
+          key: r.dataset.key,
+          name: r.querySelector('.name')?.textContent ?? '',
+        })),
+      })),
+    );
+    check(
+      'search results that share a folder sit in a box under it, each showing only the rest of its name',
+      grouped.length > 0 && grouped.every((g) => g.folder.endsWith('/') && g.rows.length > 1 && g.rows.every((r) => r.key === g.folder + r.name)),
+      JSON.stringify(grouped.slice(0, 2)),
+    );
+    await page.screenshot({ path: resolve(outDir, 'ui-field-search-groups.png') });
+    // click a value in the inspector to copy it
+    await page.locator('[data-testid=search-group] .tree-row.field').first().click();
+    await page.evaluate(`window.__brownout.timeStore.set({ cursor: 70 })`);
+    await page.waitForTimeout(300);
+    await app.evaluate(({ clipboard }) => clipboard.writeText(''));
+    await page.locator('[data-testid=insp-value]').first().click();
+    await page.waitForTimeout(300);
+    const copied = await app.evaluate(({ clipboard }) => clipboard.readText());
+    check(
+      'clicking a value in the inspector copies it',
+      copied !== '' && (await page.locator('.toast', { hasText: 'Copied the value' }).count()) > 0,
+      JSON.stringify(copied),
+    );
+    await input.fill('');
+    await page.evaluate(`window.__brownout.sessionStore.set({ selectedKeys: [] })`);
     // drag the sidebar's edge
     const sb0 = await page.locator('.sidebar').boundingBox();
     const rz = await page.locator('[data-testid=sidebar-resizer]').boundingBox();
@@ -1208,6 +1247,20 @@ async function main() {
       (await page.locator('[data-testid=layer-x]').inputValue()) === '0.3',
     JSON.stringify(layers1),
   );
+  // the box remembers the math: it says so, and clicking into it shows the math to edit
+  {
+    const lx = page.locator('[data-testid=layer-x]');
+    const remembered = (await lx.getAttribute('class'))!.includes('has-math') && ((await lx.getAttribute('title')) ?? '').includes('= 0.6 / 2');
+    await lx.click();
+    await page.waitForTimeout(100);
+    const editing = await lx.inputValue();
+    await lx.press('Enter');
+    check(
+      'a box whose value came from math says so, and clicking into it shows the math to edit',
+      remembered && editing === '0.6 / 2' && (await lx.inputValue()) === '0.3',
+      `${remembered} / ${editing}`,
+    );
+  }
   // text that is not a number is marked and changes nothing; Esc puts the value back without closing the editor
   await page.locator('[data-testid=layer-x]').fill('0.3 +');
   await page.locator('[data-testid=layer-x]').press('Enter');

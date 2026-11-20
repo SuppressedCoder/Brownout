@@ -163,6 +163,7 @@ function Num({
   max,
   title,
   testId,
+  memory,
 }: {
   value: number;
   onChange: (v: number) => void;
@@ -170,9 +171,13 @@ function Num({
   max: number;
   title?: string;
   testId?: string;
+  /** What it sets, so math typed into it is remembered (see NumberInput). */
+  memory?: string;
 }) {
-  // takes math too ("0.09448 * 360")
-  return <NumberInput value={value} onCommit={(v) => v !== null && onChange(v)} min={min} max={max} format={fmt} title={title} testId={testId} />;
+  // takes math too ("0.09448 * 360"), and remembers it
+  return (
+    <NumberInput value={value} onCommit={(v) => v !== null && onChange(v)} min={min} max={max} format={fmt} title={title} testId={testId} memory={memory} />
+  );
 }
 
 export function RobotEditor({ profileId }: { profileId: string }) {
@@ -602,6 +607,7 @@ export function RobotEditor({ profileId }: { profileId: string }) {
               <span className="size-inputs">
                 <Num
                   value={sel.x}
+                  memory={`${profileId}:${sel.id}:x`}
                   min={-PART_LIMIT}
                   max={PART_LIMIT}
                   title="Forward of the robot's center (m)"
@@ -611,6 +617,7 @@ export function RobotEditor({ profileId }: { profileId: string }) {
                 forward,
                 <Num
                   value={sel.y}
+                  memory={`${profileId}:${sel.id}:y`}
                   min={-PART_LIMIT}
                   max={PART_LIMIT}
                   title="Left of the robot's center (m)"
@@ -623,8 +630,25 @@ export function RobotEditor({ profileId }: { profileId: string }) {
             <div className="robot-pair" title="Length runs along the robot's front-to-back direction, width across it">
               Size
               <span className="size-inputs">
-                <Num value={sel.length} min={0.01} max={PART_LIMIT} title="Length (m)" onChange={(v) => patch(sel.id, { length: v })} testId="layer-length" /> ×
-                <Num value={sel.width} min={0.01} max={PART_LIMIT} title="Width (m)" onChange={(v) => patch(sel.id, { width: v })} /> m
+                <Num
+                  value={sel.length}
+                  memory={`${profileId}:${sel.id}:length`}
+                  min={0.01}
+                  max={PART_LIMIT}
+                  title="Length (m)"
+                  onChange={(v) => patch(sel.id, { length: v })}
+                  testId="layer-length"
+                />{' '}
+                ×
+                <Num
+                  value={sel.width}
+                  memory={`${profileId}:${sel.id}:width`}
+                  min={0.01}
+                  max={PART_LIMIT}
+                  title="Width (m)"
+                  onChange={(v) => patch(sel.id, { width: v })}
+                />{' '}
+                m
               </span>
             </div>
             <div className="robot-pair">
@@ -632,6 +656,7 @@ export function RobotEditor({ profileId }: { profileId: string }) {
               <span className="size-inputs">
                 <Num
                   value={sel.rotation}
+                  memory={`${profileId}:${sel.id}:rotation`}
                   min={-360}
                   max={360}
                   title="Fixed rotation, counter-clockwise (degrees)"
@@ -699,7 +724,14 @@ export function RobotEditor({ profileId }: { profileId: string }) {
                   <div className="robot-pair" title="Added to the logged angle: where the part points when the field reads zero">
                     Zero offset
                     <span className="size-inputs">
-                      <Num value={sel.link.offset} min={-360} max={360} onChange={(v) => patch(sel.id, { link: { ...sel.link!, offset: v } })} /> °
+                      <Num
+                        value={sel.link.offset}
+                        memory={`${profileId}:${sel.id}:link.offset`}
+                        min={-360}
+                        max={360}
+                        onChange={(v) => patch(sel.id, { link: { ...sel.link!, offset: v } })}
+                      />{' '}
+                      °
                     </span>
                   </div>
                   <div className="robot-pair" title="The point the part turns around. You can also drag the round marker in the preview.">
@@ -723,6 +755,7 @@ export function RobotEditor({ profileId }: { profileId: string }) {
                     <span className="size-inputs">
                       <Num
                         value={sel.pivot.x}
+                        memory={`${profileId}:${sel.id}:pivot.x`}
                         min={-PART_LIMIT}
                         max={PART_LIMIT}
                         title="Forward (m)"
@@ -732,6 +765,7 @@ export function RobotEditor({ profileId }: { profileId: string }) {
                       forward,
                       <Num
                         value={sel.pivot.y}
+                        memory={`${profileId}:${sel.id}:pivot.y`}
                         min={-PART_LIMIT}
                         max={PART_LIMIT}
                         title="Left (m)"

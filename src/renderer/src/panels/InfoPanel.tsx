@@ -75,6 +75,7 @@ export function InfoPanel({ id }: { id: string }) {
                 <span>
                   {log.offset.toFixed(3)} s{' '}
                   <NumberInput
+                    memory={`offset:${log.fileName}`}
                     className="tool-input"
                     style={{ width: 80 }}
                     value={log.manualOffset}

@@ -760,6 +760,65 @@ h4 {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* search results: fields that share a folder sit in a box under it, each showing only the rest of its name */
+.search-group {
+  margin: 4px 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.search-folder {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 6px;
+  background: var(--bg3);
+  color: var(--fg2);
+  font-size: 11px;
+  line-height: 16px;
+  border-bottom: 1px solid var(--line);
+}
+.search-folder .path,
+.key-folder {
+  /* long folders lose their start, not their end: the end is what tells them apart */
+  direction: rtl;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.search-folder .path {
+  flex: 1;
+}
+.search-folder .count {
+  flex: none;
+  font-size: 10px;
+}
+.tree-row .name.split {
+  display: flex;
+  min-width: 0;
+}
+.key-folder {
+  flex: 0 1 auto;
+  color: var(--fg2);
+}
+.key-leaf {
+  flex: none;
+}
+/* a number box whose value came from math (click into it to edit the math) */
+.tool-input.has-math {
+  text-decoration: underline dotted var(--fg2);
+  text-underline-offset: 3px;
+}
+.copyable {
+  cursor: copy;
+  border-radius: 3px;
+}
+.copyable:hover {
+  background: var(--hover-bg);
+  color: var(--strong);
+}
 .tree-row .caret {
   color: var(--fg2);
   width: 10px;
