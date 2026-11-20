@@ -23,7 +23,6 @@ import { drawLayers, linkAngle, ancestors, enterPart, enterPivotFrame } from '..
 import { fieldAssetTicker } from '../lib/fieldAssets';
 import { T } from '../lib/theme';
 import { withAlpha } from '../lib/colors';
-import { shortKey } from '../lib/fields';
 import { FieldSlot } from './FieldSlot';
 import type { FieldSpec } from '../lib/fields';
 import { Icon } from './Icon';

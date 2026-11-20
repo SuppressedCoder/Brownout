@@ -79,7 +79,6 @@ export function SubsystemEditor({ profileId }: { profileId: string }) {
 
   const setSubs = (fn: (subs: Subsystem[]) => Subsystem[]) => updateProfile(profileId, (p) => ({ subsystems: fn(p.subsystems) }));
   const patch = (id: string, p: Partial<Subsystem>) => setSubs((subs) => subs.map((s) => (s.id === id ? { ...s, ...p } : s)));
-  const inLogs = (key: string) => mine.length === 0 || mine.some((l) => l.fields.some((f) => f.key === key));
   const channelOwner = (c: number, except: string) => profile.subsystems.find((s) => s.id !== except && s.channels.includes(c));
   const fieldOwner = (k: string, except: string) => profile.subsystems.find((s) => s.id !== except && s.fields.includes(k));
   /** Put fields in a subsystem at an index (replacing the one there); a field belongs to one subsystem, so it leaves any other. */

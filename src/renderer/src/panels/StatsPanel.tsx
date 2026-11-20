@@ -2,7 +2,7 @@
  * Statistics: histogram (overlaid per log) plus a metrics table for one
  * numeric field, filtered by visible range / selection / enabled / auto / teleop.
  */
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import { panelStore, updatePanel, type StatsSettings } from '../state/panels';
 import { sessionStore, type LogEntry } from '../state/session';
 import { timeStore } from '../state/time';
@@ -15,10 +15,10 @@ import { useCanvas, type DrawContext } from '../lib/useCanvas';
 import { computeStats, histogram, type Stats } from '@core/analyzers/stats';
 import { formatValue } from '../lib/format';
 import { formatTime } from '@core/alignment';
-import { shortKey, useFieldIndex } from '../lib/fields';
+import { useFieldIndex } from '../lib/fields';
 import { withAlpha } from '../lib/colors';
-import { Toolbar, ToolButton, ToolSelect } from '../components/Toolbar';
-import { FieldPicker } from '../components/FieldPicker';
+import { Toolbar, ToolSelect } from '../components/Toolbar';
+import { PanelFieldStrip } from '../components/FieldStrip';
 import { setCursor } from '../state/time';
 
 /** Raw-time windows for a phase in one log. */
@@ -85,7 +85,6 @@ export function StatsPanel({ id }: { id: string }) {
   const view = settings.phase === 'view' ? settled : STATIC_VIEW;
   const selection = useStore(timeStore, (s) => (settings.phase === 'selection' ? s.selection : null));
   const fields = useFieldIndex();
-  const [picker, setPicker] = useState(false);
   const tick = useSeriesTick();
 
   const rows = useMemo(() => {
@@ -158,10 +157,8 @@ export function StatsPanel({ id }: { id: string }) {
 
   return (
     <div className="panel stats-panel">
+      <PanelFieldStrip id={id} />
       <Toolbar>
-        <ToolButton icon={settings.key ? undefined : 'plus'} onClick={() => setPicker(true)} title="Choose the field">
-          {settings.key ? shortKey(settings.key, 3) : 'Field'}
-        </ToolButton>
         <ToolSelect
           value={settings.phase}
           onChange={(v) => updatePanel<StatsSettings>(id, { phase: v as StatsSettings['phase'] })}
@@ -242,7 +239,6 @@ export function StatsPanel({ id }: { id: string }) {
           </div>
         </div>
       )}
-      {picker && <FieldPicker filter={(x) => x.kind === 'number'} onClose={() => setPicker(false)} onPick={(key) => updatePanel<StatsSettings>(id, { key })} />}
     </div>
   );
 }

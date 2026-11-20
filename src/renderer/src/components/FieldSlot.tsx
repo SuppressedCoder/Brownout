@@ -38,6 +38,7 @@ import {
   type MergedField,
 } from '../lib/fields';
 import { Icon } from './Icon';
+import { linkStore, pointAtField } from '../lib/panelLinks';
 
 const LIST_MAX = 300;
 
@@ -101,6 +102,8 @@ export function FieldSlot({
   logs: logsProp,
   testId,
   inline,
+  panel,
+  placeholder = 'none',
   className = '',
 }: {
   /** What the box is for, on the label line. */
@@ -115,6 +118,10 @@ export function FieldSlot({
   testId?: string;
   /** One line, no label line (in a toolbar). */
   inline?: boolean;
+  /** The panel it belongs to: pointing at it lights its field in the field list. */
+  panel?: string;
+  /** What an empty box says. */
+  placeholder?: ReactNode;
   className?: string;
 }) {
   const allLogs = useStore(sessionStore, (s) => s.logs);
@@ -212,6 +219,8 @@ export function FieldSlot({
           }
         }}
         role="button"
+        onMouseEnter={panel && value ? () => pointAtField(value, panel) : undefined}
+        onMouseLeave={panel && value ? () => pointAtField(null) : undefined}
         data-testid={testId ? `${testId}-box` : undefined}
       >
         {typing ? (
@@ -226,7 +235,7 @@ export function FieldSlot({
         ) : shown ? (
           <KeyText k={shown} />
         ) : (
-          <span className="fslot-none">none</span>
+          <span className="fslot-none">{placeholder}</span>
         )}
         {onClear && value && !typing && !over && (
           <button
@@ -468,6 +477,7 @@ export function FieldList({
   logs: logsProp,
   testId,
   addLabel = 'Field',
+  panel,
   className = '',
 }: {
   items: FieldListItem[];
@@ -480,8 +490,11 @@ export function FieldList({
   logs?: LogEntry[];
   testId?: string;
   addLabel?: string;
+  /** The panel the list belongs to: pointing at a chip lights its field in the field list (and its line). */
+  panel?: string;
   className?: string;
 }) {
+  const linked = useStore(linkStore, (s) => (s.panel === panel ? null : s.key));
   const allLogs = useStore(sessionStore, (s) => s.logs);
   const logs = logsProp ?? allLogs;
   const fit = useDragFit(spec);
@@ -559,6 +572,7 @@ export function FieldList({
     <div
       className={`flist${fit === 'ok' ? ' lit' : ''} ${className}`}
       data-testid={testId}
+      onDragEnter={(e) => dragOver(e, items.length, 'add')}
       onDragOver={(e) => dragOver(e, items.length, 'add')}
       onDragLeave={leave}
       onDrop={(e) => drop(e, items.length, 'add')}
@@ -572,8 +586,12 @@ export function FieldList({
         return (
           <span
             key={`${it.key}|${i}`}
-            className={`chip fchip${miss.length ? ' missing' : ''}${swapping ? (bad ? ' bad' : ' over') : ''}${gapBefore ? ' gap-before' : ''}${gapAfter ? ' gap-after' : ''}${shakeAt === i ? ' shake' : ''}`}
+            className={`chip fchip${it.key === linked ? ' linked' : ''}${miss.length ? ' missing' : ''}${swapping ? (bad ? ' bad' : ' over') : ''}${gapBefore ? ' gap-before' : ''}${gapAfter ? ' gap-after' : ''}${shakeAt === i ? ' shake' : ''}`}
             title={bad ? (reason ?? undefined) : [it.key, miss.length ? missingText(miss, logs) : '', it.note ?? ''].filter(Boolean).join('\n')}
+            onDragEnter={(e) => {
+              const m = where(e, i);
+              dragOver(e, m === 'gap' ? gapIndex(e, i) : i, m);
+            }}
             onDragOver={(e) => {
               const m = where(e, i);
               dragOver(e, m === 'gap' ? gapIndex(e, i) : i, m);
@@ -583,6 +601,8 @@ export function FieldList({
               drop(e, m === 'gap' ? gapIndex(e, i) : i, m);
             }}
             onAnimationEnd={() => setShakeAt(null)}
+            onMouseEnter={panel ? () => pointAtField(it.key, panel) : undefined}
+            onMouseLeave={panel ? () => pointAtField(null) : undefined}
             data-testid="fchip"
             data-key={it.key}
           >
@@ -599,6 +619,7 @@ export function FieldList({
         ref={addRef}
         className={`chip fchip add${typing ? ' typing' : ''}${over?.mode === 'add' ? (overBad ? ' bad' : ' over') : ''}${shakeAt === items.length ? ' shake' : ''}`}
         onClick={() => !typing && setTyping(true)}
+        onDragEnter={(e) => dragOver(e, items.length, 'add')}
         onDragOver={(e) => dragOver(e, items.length, 'add')}
         onDrop={(e) => drop(e, items.length, 'add')}
         onAnimationEnd={() => setShakeAt(null)}

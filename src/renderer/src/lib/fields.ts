@@ -85,7 +85,9 @@ export function typeLabels(fields: Iterable<{ kind: string; structName?: string 
 export function completeType(word: string, labels: string[]): string | null {
   if (!word) return null;
   const w = word.toLowerCase();
-  return labels.find((t) => t.toLowerCase().startsWith(w)) ?? null;
+  const fits = labels.filter((t) => t.toLowerCase().startsWith(w));
+  // a type before its array ("Pose2d", then "Pose2d[]" once "[" is typed)
+  return fits.find((t) => !(t.endsWith('[]') && fits.includes(t.slice(0, -2)))) ?? null;
 }
 
 /** Whether a field passes the type filters: any of them (none = every type). */

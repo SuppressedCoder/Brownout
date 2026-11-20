@@ -100,6 +100,7 @@ export function RobotSetup() {
     <div className="app-view robot-setup" data-testid="robot-setup">
       <div
         className={`rs-field${over ? ' drop-ready' : ''}`}
+        onDragEnterCapture={onDragOver}
         onDragOverCapture={onDragOver}
         onDragLeave={(e) => {
           if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) setOver(false);

@@ -180,6 +180,13 @@ export function severityColor(sev: string): string {
   return sev === 'error' ? p.err : sev === 'warning' ? p.warn : p.fg2;
 }
 
+/** The colors panels are marked with, by number (tabs, the field list); see lib/panelLinks.ts. */
+const PANEL_COLORS_DARK = ['#4f9ef7', '#59c27a', '#f28e2b', '#b07aa1', '#edc948', '#76b7b2', '#ff9da7', '#9c9ede'];
+const PANEL_COLORS_LIGHT = ['#1b6fd1', '#2f8a4a', '#c9670a', '#8a4f7d', '#a87900', '#2f7f79', '#c2417a', '#5a5fc0'];
+export function panelColors(): string[] {
+  return T().dark ? PANEL_COLORS_DARK : PANEL_COLORS_LIGHT;
+}
+
 export function applyTheme(): void {
   const p = T();
   const root = document.documentElement;
@@ -200,6 +207,8 @@ export function applyTheme(): void {
   set('--err-text', p.errText);
   set('--warn-text', p.warnText);
   set('--accent-soft', withAlpha(p.accent, 0.2));
+  panelColors().forEach((c, i) => set(`--panel-${i + 1}`, c));
+  set('--on-panel', p.dark ? 'rgba(0,0,0,0.85)' : '#ffffff');
   root.dataset.theme = p.id;
   root.style.colorScheme = p.dark ? 'dark' : 'light';
 }

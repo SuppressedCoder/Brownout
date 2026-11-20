@@ -29,6 +29,8 @@ import { indexAtOrBefore } from '@core/log';
 import { formatValue } from '../lib/format';
 import { toast } from '../state/ui';
 import { Icon } from './Icon';
+import { InPanels } from './InPanels';
+import { useFieldPanels, linkStore, pointAtField, panelColorVar, inPanelsStore } from '../lib/panelLinks';
 
 interface Node {
   name: string;
@@ -159,6 +161,8 @@ export function Sidebar() {
   const [open, setOpen] = useState<Set<string>>(() => new Set());
   const [favOpen, setFavOpen] = useState(true);
   const [showGenerated, setShowGenerated] = useState(true);
+  const inPanels = useStore(inPanelsStore, (s) => s.on);
+  const fieldPanels = useFieldPanels();
   const tree = useMemo(() => buildTree(fields), [fields]);
   const anchor = useRef<string | null>(null);
   /** Field keys in the order they are on screen, for Shift-click ranges. */
@@ -266,6 +270,7 @@ export function Sidebar() {
         logs={logs}
         selected={selected.includes(f.key)}
         favorite={favorites.includes(f.key)}
+        panels={fieldPanels.get(f.key)}
         onClick={onRowClick}
         onDrag={onRowDrag}
         addSelection={() =>
@@ -349,11 +354,22 @@ export function Sidebar() {
             />
           </span>
         </div>
-        <button className={`tool-btn${showGenerated ? ' active' : ''}`} title="Show struct / array children" onClick={() => setShowGenerated(!showGenerated)}>
-          {'{}'}
+        {!inPanels && (
+          <button className={`tool-btn${showGenerated ? ' active' : ''}`} title="Show struct / array children" onClick={() => setShowGenerated(!showGenerated)}>
+            {'{}'}
+          </button>
+        )}
+        <button
+          className={`tool-btn in-panels-btn${inPanels ? ' active' : ''}`}
+          title="Only the fields the panels show, with their values at the cursor"
+          onClick={() => inPanelsStore.set({ on: !inPanels })}
+          data-testid="in-panels-toggle"
+        >
+          In panels
         </button>
       </div>
-      <div className="tree scroll" data-testid="field-tree">
+      {inPanels && <InPanels q={q} />}
+      <div className="tree scroll" data-testid="field-tree" hidden={inPanels}>
         {logs.length === 0 && <div className="hint">No logs open.</div>}
         {!flat && favorites.length > 0 && logs.length > 0 && (
           <div className="fav-section">
@@ -396,7 +412,7 @@ export function Sidebar() {
           : renderNode(tree, 0)}
         {flat && flat.length === 0 && <div className="hint">No matches.</div>}
       </div>
-      {selected.length > 1 && (
+      {selected.length > 1 && !inPanels && (
         <div className="selection-bar">
           <span>{selected.length} selected</span>
           <button
@@ -411,7 +427,7 @@ export function Sidebar() {
           </button>
         </div>
       )}
-      <Inspector />
+      {!inPanels && <Inspector />}
     </div>
   );
 }
@@ -424,6 +440,7 @@ function FieldRow({
   logs,
   selected,
   favorite,
+  panels,
   onClick,
   onDrag,
   addSelection,
@@ -436,13 +453,19 @@ function FieldRow({
   logs: { id: string; color: string; name: string }[];
   selected: boolean;
   favorite: boolean;
+  /** The numbers of the panels showing it. */
+  panels?: number[];
   onClick: (e: React.MouseEvent, key: string) => void;
   onDrag: (e: React.DragEvent, f: MergedField) => void;
   addSelection: () => void;
 }) {
+  // lit while the pointer is on a panel showing it, or on its chip in a panel
+  const linked = useStore(linkStore, (s) => s.panel !== null && s.keys.has(f.key));
   return (
     <div
-      className={`tree-row field${selected ? ' selected' : ''}${f.generated ? ' generated' : ''}`}
+      className={`tree-row field${selected ? ' selected' : ''}${f.generated ? ' generated' : ''}${linked ? ' linked' : ''}`}
+      onMouseEnter={panels ? () => pointAtField(f.key) : undefined}
+      onMouseLeave={panels ? () => pointAtField(null) : undefined}
       style={{ paddingLeft: 6 + depth * 12 }}
       draggable
       data-key={f.key}
@@ -463,6 +486,15 @@ function FieldRow({
       )}
       {f.unit && <span className="unit">{f.unit}</span>}
       <span className="kind-badge">{typeLabel(f)}</span>
+      {panels && (
+        <span className="row-pns" data-testid="row-panels">
+          {panels.map((n) => (
+            <span key={n} className="pn small" style={{ background: panelColorVar(n) }}>
+              {n}
+            </span>
+          ))}
+        </span>
+      )}
       {logs.length > 1 && (
         <span className="log-dots">
           {logs.map((l) => (

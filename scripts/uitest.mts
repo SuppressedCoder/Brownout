@@ -102,6 +102,21 @@ const menuState = (page: Page) =>
   })()`) as Promise<string>;
 const toastText = async (page: Page) => (await page.locator('.toast').allInnerTexts()).join(' | ');
 
+/** Put a graph line on an axis (setup for a check). */
+async function updateAxis(page: Page, id: string, i: number, axis: 'left' | 'right'): Promise<void> {
+  await page.evaluate(
+    ([id, i, axis]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const s = (globalThis as any).__brownout.panelStore;
+      const p = s.get().panels[id as string];
+      s.set({
+        panels: { ...s.get().panels, [id as string]: { ...p, series: p.series.map((x: { axis: string }, j: number) => (j === i ? { ...x, axis } : x)) } },
+      });
+    },
+    [id, i, axis] as const,
+  );
+}
+
 async function dialogButton(page: Page, label: string): Promise<void> {
   await page.locator('.dialog .btn', { hasText: label }).first().click();
   await page.waitForTimeout(150);
@@ -729,21 +744,13 @@ async function main() {
     (await toolbarHeights()).join(','),
   );
   check(
-    'graph field chips sit on one line',
-    ((await page.evaluate(`Math.round(document.querySelector('.graph-panel .series-chips').getBoundingClientRect().height)`)) as number) <= 28,
+    'a graph lists its fields in one strip under its tab',
+    ((await page.evaluate(`Math.round(document.querySelector('.graph-panel .field-strip').getBoundingClientRect().height)`)) as number) <= 60 &&
+      (await page.locator('.graph-panel .field-strip [data-testid=fchip]').count()) >= 1,
   );
   await page.evaluate(`window.__brownout.settingsStore.set({ compact: true })`);
   await page.waitForTimeout(300);
-  check(
-    'compact view collapses the chips to a count',
-    (await page.locator('.graph-panel .series-chips').count()) === 0 &&
-      /^\d+ fields?$/.test((await page.locator('[data-testid=graph-fields]').first().innerText()).trim()),
-    await page
-      .locator('[data-testid=graph-fields]')
-      .first()
-      .innerText()
-      .catch(() => 'missing'),
-  );
+  check('compact view keeps the field strip', (await page.locator('.graph-panel .field-strip [data-testid=fchip]').count()) >= 1);
   check(
     '...and keeps only the most-used toolbar buttons',
     (await page.locator('.graph-panel').first().locator('.ov-items .tool-btn', { hasText: 'Modes' }).count()) === 0,
@@ -756,10 +763,6 @@ async function main() {
       (await page.locator('.ov-menu .tool-btn', { hasText: 'Threshold' }).count()) === 1,
   );
   await page.screenshot({ path: resolve(outDir, 'ui-compact-menu.png') });
-  await page.keyboard.press('Escape');
-  await page.locator('[data-testid=graph-fields]').first().click();
-  check('the field list menu is fully visible', (await menuState(page)) === 'ok', await menuState(page));
-  check('the field count opens the list of fields', (await page.locator('.chip-list .chip-row').count()) >= 1);
   await page.keyboard.press('Escape');
   await page.evaluate(`window.__brownout.settingsStore.set({ compact: false })`);
   // narrow window
@@ -850,6 +853,142 @@ async function main() {
   check('favorites are listed at the top of the sidebar', (await page.locator('.fav-section .tree-row.field').count()) === 1);
   await page.screenshot({ path: resolve(outDir, 'ui-multiselect.png') });
   await page.locator('.selection-bar .link-btn', { hasText: 'Clear' }).click();
+
+  console.log('Field slots in panels');
+  {
+    const tabs = await page
+      .locator('[data-testid=panel-tab]')
+      .evaluateAll((els) => els.map((e) => Number((e as unknown as { dataset: { n: string } }).dataset.n)));
+    check('panels are numbered in their tabs', tabs.length >= 4 && [...tabs].sort((a, b) => a - b).every((n, i) => n === i + 1), tabs.join(','));
+    const gid = newGraph;
+    const n = await state<number>(page, `s.gridStore.get().order.indexOf('${gid}') + 1`);
+    const rowNums = await fieldRow('/Shooter/SupplyCurrentAmps').last().locator('[data-testid=row-panels] .pn').allInnerTexts();
+    check('a field in the list shows the numbers of the panels it is in', n > 0 && rowNums.includes(String(n)), `${n} | ${rowNums.join(',')}`);
+    // bring the graph to the front of its area (Statistics was added after it)
+    const front = async (id: string) => {
+      const k = await state<number>(page, `s.gridStore.get().order.indexOf('${id}') + 1`);
+      await page.locator(`[data-testid=panel-tab][data-n="${k}"]`).click();
+      await page.waitForTimeout(200);
+    };
+    await front(gid);
+    // pointing at the field's chip lights its row in the list
+    await page.locator(`[data-panel="${gid}"] [data-testid=fchip][data-key="/Shooter/SupplyCurrentAmps"]`).hover();
+    await page.waitForTimeout(100);
+    check(
+      'pointing at a chip lights its field in the list',
+      (await fieldRow('/Shooter/SupplyCurrentAmps').last().getAttribute('class'))?.includes('linked') === true,
+    );
+    await page.mouse.move(5, 5);
+    // + Field: type, and Tab completes
+    const before = (await seriesOf(gid)).length;
+    await page.locator(`[data-panel="${gid}"] [data-testid=strip-list-add]`).click();
+    await page.keyboard.type('Intake/Sup');
+    await page.waitForTimeout(150);
+    const listed = await page.locator('[data-testid=fsearch-row]').count();
+    await page.keyboard.press('Tab');
+    await page.waitForTimeout(200);
+    check(
+      '+ Field takes typing: the list shows what fits, Tab completes the name',
+      listed >= 1 && (await seriesOf(gid)).length === before + 1 && (await seriesOf(gid)).includes('/Intake/SupplyCurrentAmps'),
+      `${listed} | ${(await seriesOf(gid)).join(',')}`,
+    );
+    // dropping on a chip swaps that field, keeping its place and axis
+    await updateAxis(page, gid, 0, 'right');
+    const first = (await seriesOf(gid))[0];
+    await page.locator('[data-testid=field-search-input]').fill('FullCycle');
+    await page.waitForTimeout(200);
+    const loopRow = page.locator('.tree-row.field').filter({ hasText: 'FullCycle' }).first();
+    const loopKey = (await loopRow.getAttribute('data-key')) ?? '';
+    const chip0 = page.locator(`[data-panel="${gid}"] [data-testid=fchip]`).first();
+    await loopRow.dragTo(chip0);
+    await page.waitForTimeout(300);
+    const after = await state<{ key: string; axis: string }[]>(page, `s.panelStore.get().panels['${gid}'].series`);
+    check(
+      'dropping on a chip swaps its field, keeping its place and axis',
+      !!loopKey && after[0]?.key === loopKey && after[0]?.axis === 'right' && !after.some((x) => x.key === first),
+      `${loopKey} | ${JSON.stringify(after)}`,
+    );
+    // dropping on a chip's edge adds the field beside it
+    await page.locator('[data-testid=field-search-input]').fill('Elevator/Position');
+    await page.waitForTimeout(200);
+    const posRow = page.locator('.tree-row.field').first();
+    const posKey = (await posRow.getAttribute('data-key')) ?? '';
+    const chip1 = page.locator(`[data-panel="${gid}"] [data-testid=fchip]`).nth(1);
+    const cb = (await chip1.boundingBox())!;
+    await posRow.dragTo(chip1, { targetPosition: { x: 2, y: cb.height / 2 } });
+    await page.waitForTimeout(300);
+    const after2 = await seriesOf(gid);
+    check('dropping at a chip’s edge adds the field there', after2[1] === posKey, `${posKey} | ${after2.join(',')}`);
+    // a field the graph can't show: the chip stays as it was
+    await page.locator('[data-testid=field-search-input]').fill('Odometry/Robot');
+    await page.waitForTimeout(200);
+    await fieldRow('/RealOutputs/Odometry/Robot').dragTo(page.locator(`[data-panel="${gid}"] [data-testid=fchip]`).first());
+    await page.waitForTimeout(300);
+    check('a chip refuses a field its panel can’t show', (await seriesOf(gid)).join() === after2.join(), (await seriesOf(gid)).join(','));
+    // the graph splits into its axes while a field is dragged over it
+    await page.locator('[data-testid=field-search-input]').fill('StatorCurrent');
+    await page.waitForTimeout(200);
+    const statorRow = page.locator('.tree-row.field').first();
+    const statorKey = (await statorRow.getAttribute('data-key')) ?? '';
+    // the halves appear only once the drag has started, so drag by hand
+    await statorRow.hover();
+    await page.mouse.down();
+    const sr = (await statorRow.boundingBox())!;
+    await page.mouse.move(sr.x + 40, sr.y + 30, { steps: 4 });
+    const halfR = page.locator(`[data-panel="${gid}"] [data-testid=axis-drop-right]`);
+    await halfR.waitFor({ timeout: 3000 }).catch(() => undefined);
+    const hb = await halfR.boundingBox();
+    if (hb) {
+      await page.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2, { steps: 8 });
+      await page.mouse.move(hb.x + hb.width / 2 + 4, hb.y + hb.height / 2, { steps: 2 });
+    }
+    await page.mouse.up();
+    await page.waitForTimeout(300);
+    const after3 = await state<{ key: string; axis: string }[]>(page, `s.panelStore.get().panels['${gid}'].series`);
+    check(
+      'dropping on the right half of a graph puts the field on the right axis',
+      after3.some((x) => x.key === statorKey && x.axis === 'right'),
+      JSON.stringify(after3),
+    );
+    // statistics: one slot
+    await page.locator('[data-testid=field-search-input]').fill('BatteryVoltage');
+    await page.waitForTimeout(200);
+    const voltRow = page.locator('.tree-row.field').first();
+    const voltKey = (await voltRow.getAttribute('data-key')) ?? '';
+    await front(newStats);
+    await voltRow.dragTo(page.locator(`[data-panel="${newStats}"] [data-testid=strip-slot-box]`));
+    await page.waitForTimeout(300);
+    check(
+      'Statistics has one slot for its field',
+      (await state<string | null>(page, `s.panelStore.get().panels['${newStats}'].key`)) === voltKey,
+      await state<string>(page, `String(s.panelStore.get().panels['${newStats}'].key)`),
+    );
+    // the timeline takes a field as a track
+    const tracks0 = await state<number>(page, 's.sessionStore.get().timelineTracks.length');
+    await voltRow.dragTo(page.locator('[data-testid=timeline-canvas]'));
+    await page.waitForTimeout(300);
+    check('dropping a field on the timeline adds a track', (await state<number>(page, 's.sessionStore.get().timelineTracks.length')) === tracks0 + 1);
+    await page.locator('[data-testid=field-search-input]').fill('');
+    // In panels
+    await page.locator('[data-testid=in-panels-toggle]').click();
+    await page.waitForTimeout(400);
+    const areas = await state<number>(page, 'document.querySelectorAll(".dv-groupview").length');
+    const sections = await page.locator('[data-testid=ip-section]').count();
+    const values = await page.locator('[data-testid=ip-value]').allInnerTexts();
+    check(
+      'In panels shows one section per grid area, with values at the cursor',
+      sections === areas && values.length >= 2 && values.some((v) => /\d/.test(v)),
+      `${sections} sections, ${areas} areas, values ${values.slice(0, 4).join(' | ')}`,
+    );
+    check(
+      '...and the field list and inspector step aside',
+      (await page.locator('[data-testid=field-tree]').isHidden()) && (await page.locator('.inspector').count()) === 0,
+    );
+    await page.screenshot({ path: resolve(outDir, 'ui-in-panels.png') });
+    await page.locator('[data-testid=in-panels-toggle]').click();
+    await page.waitForTimeout(200);
+    check('switching it off brings the field list back', await page.locator('[data-testid=field-tree]').isVisible());
+  }
 
   console.log('Power by subsystem');
   const presetBeforeViews = await presetText(page);
@@ -994,7 +1133,8 @@ async function main() {
       offered.some((t) => t.includes('The robot’s position')) &&
         offered.some((t) => t.includes('where it thinks the robot is')) &&
         (await state<string | undefined>(page, 's.profileStore.get().profiles[0].roleOverrides.robotPose')) === '/RealOutputs/Odometry/Robot' &&
-        ((await page.locator('[data-testid=role-robotPose]').innerText()) ?? '').includes('Odometry/Robot'),
+        // the box shows the folder and the name in two spans
+        ((await page.locator('[data-testid=role-robotPose-box]').innerText()) ?? '').replace(/\s+/g, '').includes('Odometry/Robot'),
       offered.join(' | '),
     );
     await page.locator('[data-testid=role-robotPose-box]').hover();
@@ -1025,6 +1165,66 @@ async function main() {
     await page.keyboard.press('Control+z');
     await page.waitForTimeout(500);
     check('...and undo takes it back', (await state<number>(page, 's.profileStore.get().profiles[0].cameras.length')) === 0);
+    // field slots: every row on the right takes a dropped field, or typing
+    const override = (r: string) => state<string | undefined>(page, `s.profileStore.get().profiles[0].roleOverrides.${r}`);
+    await search.fill('Odometry/Robot');
+    await page.waitForTimeout(200);
+    await page.locator('.tree-row.field[data-key="/RealOutputs/Odometry/Robot"]').dragTo(page.locator('[data-testid=role-targetPose-box]'));
+    await page.waitForTimeout(500);
+    check('dropping a field on a box sets it', (await override('targetPose')) === '/RealOutputs/Odometry/Robot', String(await override('targetPose')));
+    await page.locator('.tree-row.field[data-key="/RealOutputs/Odometry/Robot"]').dragTo(page.locator('[data-testid=role-activePath-box]'));
+    await page.waitForTimeout(150);
+    const tip = await page
+      .locator('[data-testid=role-activePath] .fslot-tip')
+      .innerText()
+      .catch(() => '');
+    check(
+      'a box refuses a field of the wrong type and says why',
+      (await override('activePath')) === undefined && tip.includes('Takes Pose2d[]') && tip.includes('is Pose2d'),
+      `${await override('activePath')} | ${tip}`,
+    );
+    await page.waitForTimeout(400);
+    await page.locator('[data-testid=role-chassisSpeeds-box]').click();
+    await page.keyboard.type('RealOutputs/Odometry/Rob');
+    await page.waitForTimeout(150);
+    await page.keyboard.press('Tab');
+    await page.waitForTimeout(150);
+    const listOpen = await page.locator('[data-testid=fsearch]').isVisible();
+    const tabTip = await page
+      .locator('[data-testid=role-chassisSpeeds] .fslot-tip')
+      .innerText()
+      .catch(() => '');
+    check(
+      'Tab onto a field the box can’t take: it says why and the list stays open',
+      listOpen && tabTip.includes('ChassisSpeeds') && (await override('chassisSpeeds')) === undefined,
+      `${listOpen} | ${tabTip}`,
+    );
+    await page.locator('[data-testid=fslot-input]').fill('RealOutputs/SwerveCh');
+    await page.waitForTimeout(150);
+    await page.keyboard.press('Tab');
+    await page.waitForTimeout(500);
+    check(
+      'Tab completes a field the box takes',
+      (await override('chassisSpeeds')) === '/RealOutputs/SwerveChassisSpeeds/Measured',
+      String(await override('chassisSpeeds')),
+    );
+    await page.screenshot({ path: resolve(outDir, 'ui-setup-slots.png') });
+    await page.locator('[data-testid=robot-setup] .rs-tabs').click({ position: { x: 2, y: 2 } });
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(400);
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(400);
+    check(
+      '...and undo takes the boxes back',
+      (await override('chassisSpeeds')) === undefined && (await override('targetPose')) === undefined,
+      `${await override('chassisSpeeds')} | ${await override('targetPose')}`,
+    );
+    await page.locator('[data-testid=setup-tab-names]').click();
+    await page.waitForTimeout(150);
+    const shut = page.locator('[data-testid=role-group][aria-expanded=false]');
+    for (let i = 0; i < 5 && (await shut.count()); i++) await shut.first().click();
+    check('Field names lists every field Brownout looks for, in groups', (await page.locator('[data-testid=field-names] .fslot-wrap').count()) === 18);
+    await page.locator('[data-testid=setup-tab-field]').click();
     await search.fill('');
   }
   await page.locator('[data-testid=profile-menu]').click();

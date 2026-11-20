@@ -15,7 +15,7 @@
  * mouse; clicking a run jumps to its start; clicking a name jumps to that
  * command's next run (Shift: the previous one). A filter finds commands by name.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { panelStore, updatePanel, type CommandsSettings } from '../state/panels';
 import { sessionStore, type LogEntry } from '../state/session';
 import { timeStore, setCursor, gotoTime } from '../state/time';
@@ -30,11 +30,11 @@ import { formatTime } from '@core/alignment';
 import { T } from '../lib/theme';
 import { withAlpha } from '../lib/colors';
 import { drawCursor, drawTimeAxis, fitText } from '../lib/draw';
-import { Toolbar, ToolButton, ToolSelect, ToolGroup, ToolInput } from '../components/Toolbar';
-import { FieldPicker } from '../components/FieldPicker';
+import { Toolbar, ToolSelect, ToolInput } from '../components/Toolbar';
+import { FieldSlot, KeyText } from '../components/FieldSlot';
+import type { FieldSpec } from '../lib/fields';
+import { StripRow } from '../components/FieldStrip';
 import { GuideLink } from '../components/Guide';
-import { Icon } from '../components/Icon';
-import { shortKey } from '../lib/fields';
 
 /** Width of the command-name column: wider panels give long command names more room. */
 const labelW = (width: number) => Math.round(Math.min(340, Math.max(220, width * 0.42)));
@@ -48,6 +48,9 @@ interface Hover {
   row: number;
   run: string | null;
 }
+
+/** The field that lists the running commands. */
+const COMMAND_LIST: FieldSpec = { types: ['string[]'] };
 
 const sourceCache = new WeakMap<FieldInfo[], CommandSource[]>();
 function sourceFor(log: LogEntry, override: string | undefined): CommandSource | null {
@@ -154,7 +157,6 @@ export function CommandsPanel({ id }: { id: string }) {
   const settings = useStore(panelStore, (s) => s.panels[id] as CommandsSettings);
   const logs = useStore(sessionStore, (s) => s.logs.filter((l) => l.visible));
   useSeriesTick();
-  const [picker, setPicker] = useState(false);
   const hover = useMemo(() => createStore<Hover>({ row: -1, run: null }), []);
   const draw = useCallback((dc: DrawContext) => drawCommands(dc, id, hover), [id, hover]);
   const ref = useCanvas(draw, [timeStore, sessionStore, panelStore, hover], [id]);
@@ -236,30 +238,19 @@ export function CommandsPanel({ id }: { id: string }) {
 
   return (
     <div className="panel commands-panel">
+      <StripRow>
+        <FieldSlot
+          inline
+          spec={COMMAND_LIST}
+          value={settings.sourceKey ?? (autoSource?.kind === 'names' ? autoSource.key : undefined)}
+          placeholder={autoSource?.kind === 'booleans' ? <KeyText k={autoSource.prefix} /> : undefined}
+          panel={id}
+          onPick={(key) => updatePanel<CommandsSettings>(id, { sourceKey: key })}
+          onClear={settings.sourceKey ? () => updatePanel<CommandsSettings>(id, { sourceKey: undefined }) : undefined}
+          testId="commands-source"
+        />
+      </StripRow>
       <Toolbar>
-        <ToolButton icon="plus" onClick={() => setPicker(true)} title="Choose the field that lists the running commands (a string array)">
-          Source field
-        </ToolButton>
-        {settings.sourceKey ? (
-          <ToolGroup className="chip">
-            <span title={settings.sourceKey}>{shortKey(settings.sourceKey, 3)}</span>
-            <button
-              className="chip-btn"
-              title="Go back to finding the commands automatically"
-              onClick={() => updatePanel<CommandsSettings>(id, { sourceKey: undefined })}
-            >
-              <Icon name="close" size={10} />
-            </button>
-          </ToolGroup>
-        ) : (
-          autoSource && (
-            <ToolGroup className="toolbar-note">
-              <span title={autoSource.kind === 'names' ? autoSource.key : `${autoSource.keys.length} true/false fields under ${autoSource.prefix}`}>
-                from {autoSource.kind === 'names' ? shortKey(autoSource.key, 2) : shortKey(autoSource.prefix, 2)}
-              </span>
-            </ToolGroup>
-          )
-        )}
         <ToolInput
           low
           value={settings.filter ?? ''}
@@ -288,7 +279,7 @@ export function CommandsPanel({ id }: { id: string }) {
             AdvantageKit: log <code>CommandsAll/&lt;name&gt;</code> as true while each command runs, from the scheduler&apos;s onCommandInitialize,
             onCommandFinish and onCommandInterrupt.
             <br />
-            If the log keeps the list under another name, pick it with Source field.
+            If the log keeps the list under another name, drop it on the box at the top.
             <br />
             <GuideLink section="commands">The code for both, in the guide</GuideLink>
           </div>
@@ -300,14 +291,6 @@ export function CommandsPanel({ id }: { id: string }) {
             <canvas ref={ref} />
           </div>
         </div>
-      )}
-      {picker && (
-        <FieldPicker
-          title="Field that lists the running commands"
-          filter={(f) => f.kind === 'string[]'}
-          onClose={() => setPicker(false)}
-          onPick={(key) => updatePanel<CommandsSettings>(id, { sourceKey: key })}
-        />
       )}
     </div>
   );
