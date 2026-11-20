@@ -1,3 +1,4 @@
+import { roleTypes, ROLE_GROUPS, ROLE_LABELS } from './roles';
 import { describe, it, expect } from 'vitest';
 import { WpilogWriter } from './wpilog/writer';
 import { WpilogReader, decodePrimitive } from './wpilog/reader';
@@ -418,5 +419,19 @@ describe('math in number boxes', () => {
     expect(parseSpanInput('500ms')).toBe(0.5);
     expect(parseSpanInput('2 * 60')).toBe(120);
     expect(parseSpanInput('1 - 2')).toBeNull();
+  });
+});
+
+describe('role types (what a field box for a role takes)', () => {
+  it('names struct types as the app shows them, arrays with []', () => {
+    expect(roleTypes('robotPose')).toEqual(['Pose2d', 'Pose3d', 'number[]']);
+    expect(roleTypes('activePath')).toEqual(['Pose2d[]']);
+    expect(roleTypes('batteryVoltage')).toEqual(['number']);
+    expect(roleTypes('swerveMeasured')).toEqual(['SwerveModuleState[]', 'SwerveModuleVelocity[]']);
+  });
+  it('lists every role once in the Field names groups', () => {
+    const all = ROLE_GROUPS.flatMap((g) => g.roles);
+    expect(new Set(all).size).toBe(all.length);
+    expect(all.length).toBe(Object.keys(ROLE_LABELS).length);
   });
 });

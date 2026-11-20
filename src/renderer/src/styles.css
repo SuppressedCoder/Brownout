@@ -337,26 +337,6 @@ code {
 .rs-field.drop-ready {
   border-color: var(--accent);
 }
-.rs-drop-hint {
-  position: absolute;
-  left: 50%;
-  /* under the field's toolbar, clear of the legend (top left) and the camera readout (bottom) */
-  top: 40px;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 12px;
-  background: var(--legend-bg);
-  color: var(--fg2);
-  font-size: 12px;
-  pointer-events: none;
-  white-space: nowrap;
-}
-.rs-field.drop-ready .rs-drop-hint {
-  color: var(--strong);
-}
 .rs-side {
   flex: 0 0 400px;
   min-width: 0;
@@ -401,7 +381,55 @@ code {
   min-height: 0;
   padding: 6px 10px 20px;
 }
-.on-field .dot {
+.slot-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-bottom: 9px;
+}
+.slot-card {
+  margin: 0 0 10px;
+  padding: 7px 8px 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.slot-card-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+.cam-slots {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0 8px;
+}
+.role-group {
+  margin-bottom: 4px;
+}
+.role-group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 2px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 8px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.role-group-head .count {
+  color: var(--fg2);
+  font-weight: normal;
+  font-size: 11px;
+}
+.on-field .dot,
+.slot-card .dot {
   display: inline-block;
   width: 8px;
   height: 8px;
@@ -2839,4 +2867,274 @@ h4 {
     flex: 1;
     min-height: 0;
   }
+}
+
+/* Field slots: one box wherever a field is chosen (components/FieldSlot.tsx) */
+.fslot-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.fslot-wrap.inline {
+  flex-direction: row;
+  align-items: center;
+}
+.fslot-label {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  font-size: 12px;
+}
+.fslot-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 75%;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* the name keeps its room; a long list of types loses its end (the whole list is in the tooltip) */
+.fslot-types {
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--fg2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fslot-wrap.bad .fslot-types {
+  color: var(--err-text);
+}
+.fslot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 28px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--bg2);
+  font-family: var(--mono);
+  font-size: 12px;
+  cursor: text;
+  outline: none;
+  transition:
+    border-color 0.12s,
+    background-color 0.12s;
+}
+.fslot-wrap.inline .fslot {
+  min-height: 22px;
+  padding: 1px 6px;
+  min-width: 160px;
+  max-width: 340px;
+}
+.fslot:hover,
+.fslot:focus-visible {
+  border-color: var(--fg2);
+}
+.fslot.empty {
+  border-style: dashed;
+}
+.fslot-none {
+  color: var(--fg2);
+  font-family: var(--font);
+}
+.fslot.lit {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.fslot.over {
+  border: 1px solid var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+  background: var(--accent-soft);
+}
+.fslot.missing {
+  border-color: var(--warn);
+}
+.fslot.bad {
+  border-color: var(--err);
+  box-shadow: inset 3px 0 0 var(--err);
+}
+.fslot.typing {
+  border: 1px solid var(--accent);
+  background: var(--bg);
+}
+.fslot-input {
+  min-width: 0;
+}
+.fslot-input input,
+.fslot-input .search-ghost {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.fslot-clear {
+  margin-left: auto;
+  visibility: hidden;
+}
+.fslot:hover .fslot-clear {
+  visibility: visible;
+}
+.fkey {
+  display: flex;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.fkey-leaf {
+  flex: none;
+  font-weight: 600;
+  color: var(--strong);
+}
+.fslot-tip {
+  position: absolute;
+  left: -1px;
+  top: calc(100% + 4px);
+  z-index: 40;
+  padding: 3px 7px;
+  border: 1px solid var(--err);
+  border-radius: 4px;
+  background: var(--bg3);
+  color: var(--err-text);
+  font: 11px/1.3 var(--font);
+  white-space: nowrap;
+  pointer-events: none;
+}
+@keyframes fslot-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-4px);
+  }
+  40% {
+    transform: translateX(4px);
+  }
+  60% {
+    transform: translateX(-3px);
+  }
+  80% {
+    transform: translateX(2px);
+  }
+}
+.shake {
+  animation: fslot-shake 0.32s ease-in-out;
+}
+
+/* the list under a slot while typing: fields that fit, grouped by folder */
+.fsearch {
+  position: fixed;
+  z-index: 3500;
+  overflow: auto;
+  padding: 2px 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  font-size: 12px;
+}
+.fsearch .search-group {
+  margin: 3px 4px;
+}
+.fsearch-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 8px;
+  line-height: 19px;
+  font-family: var(--mono);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.fsearch-row.hl {
+  background: var(--active-bg);
+}
+.fsearch-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* several fields: chips with + Field at the end */
+.flist {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.fchip {
+  position: relative;
+  max-width: 100%;
+  font-family: var(--mono);
+  cursor: default;
+}
+.fchip .fkey-leaf {
+  font-weight: 600;
+}
+.fchip.missing {
+  border-color: var(--warn);
+}
+.fchip.over {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.fchip.bad {
+  border-color: var(--err);
+  box-shadow: inset 3px 0 0 var(--err);
+}
+.fchip.gap-before::before,
+.fchip.gap-after::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+.fchip.gap-before::before {
+  left: -4px;
+}
+.fchip.gap-after::after {
+  right: -4px;
+}
+.fchip.add {
+  border-style: dashed;
+  color: var(--fg2);
+  font-family: var(--font);
+  cursor: pointer;
+  padding-right: 7px;
+}
+.fchip.add:hover {
+  color: var(--fg);
+  border-color: var(--fg2);
+}
+.flist.lit .fchip.add {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.fchip.add.over {
+  border-style: solid;
+  color: var(--fg);
+}
+.fchip.add.typing {
+  border: 1px solid var(--accent);
+  background: var(--bg);
+  min-width: 200px;
+  cursor: text;
+}
+.fslot-tip.in-list {
+  top: 100%;
 }

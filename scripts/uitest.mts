@@ -994,11 +994,16 @@ async function main() {
       offered.some((t) => t.includes('The robot’s position')) &&
         offered.some((t) => t.includes('where it thinks the robot is')) &&
         (await state<string | undefined>(page, 's.profileStore.get().profiles[0].roleOverrides.robotPose')) === '/RealOutputs/Odometry/Robot' &&
-        ((await page.locator('[data-testid=on-the-field] [data-role=robotPose]').innerText()) ?? '').includes('set here'),
+        ((await page.locator('[data-testid=role-robotPose]').innerText()) ?? '').includes('Odometry/Robot'),
       offered.join(' | '),
     );
-    await page.locator('[data-testid=on-the-field] [data-role=robotPose] button', { hasText: 'Clear' }).click();
+    await page.locator('[data-testid=role-robotPose-box]').hover();
+    await page.locator('[data-testid=role-robotPose] .fslot-clear').click();
     await page.waitForTimeout(400);
+    check(
+      'a field you picked has a clear button, which goes back to finding it by name',
+      (await state<string | undefined>(page, 's.profileStore.get().profiles[0].roleOverrides.robotPose')) === undefined,
+    );
     // tag IDs: offered to the cameras found by name, or a new one; the first change keeps the found ones
     await search.fill('Camera0/TagIds');
     await page.waitForTimeout(200);
@@ -1190,7 +1195,8 @@ async function main() {
     );
     await page.locator('[data-testid=camera-editor] .subsys-card').first().locator('.subsys-name').fill('Front camera');
     // a camera with only tag IDs: the other fields are left empty
-    await page.locator('[data-testid=camera-editor] .subsys-card').nth(1).locator('.cam-slot').first().locator('.chip-btn').click();
+    await page.locator('[data-testid=camera-editor] .subsys-card').nth(1).locator('[data-testid=cam-poseKey-box]').hover();
+    await page.locator('[data-testid=camera-editor] .subsys-card').nth(1).locator('[data-testid=cam-poseKey] .fslot-clear').click();
     await page.screenshot({ path: resolve(outDir, 'ui-camera-editor.png') });
     check('no emoji in the camera editor', (await pictographs(page)) === '', await pictographs(page));
     await page.locator('[data-testid=cameras-done]').click();
@@ -1340,9 +1346,9 @@ async function main() {
       (await state<number>(page, 's.profileStore.get().profiles[0].layers[0].x')) === 0.3 &&
       (await page.locator('[data-testid=robot-editor]').count()) === 1,
   );
-  await page.locator('[data-testid=layer-link]').click();
-  await page.locator('.modal-head input').last().fill('TurretPosition');
-  await page.locator('.modal-row').first().click();
+  await page.locator('[data-testid=layer-link-box]').click();
+  await page.locator('[data-testid=fslot-input]').fill('TurretPosition');
+  await page.keyboard.press('Enter');
   await page.waitForTimeout(200);
   const linked = await state<{ link: { key: string; unit: string } | null; pivot: { x: number } }>(page, 's.profileStore.get().profiles[0].layers[0]');
   check(

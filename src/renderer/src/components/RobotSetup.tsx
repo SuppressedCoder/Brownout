@@ -10,10 +10,12 @@
  *   thinks, the path, swerve states, an angle that turns a robot part. The
  *   answer goes into the profile, so every log from this robot follows, and
  *   the field shows it at once.
- * - Right: the profile in tabs. "On the field" lists what the field shows and
- *   where each piece comes from (found by name, or set here); the others are
- *   the robot (size, parts, swerve), cameras, power subsystems, field names,
- *   and which profile each open log uses with the favorites.
+ * - Right: the profile in tabs. "On the field" has a field slot for each
+ *   thing the field shows (robot pose, path, cameras, turning parts): drop a
+ *   field from the list on it, or click it and type. The others are the
+ *   robot (size, parts, swerve), cameras, power subsystems, every field
+ *   Brownout looks for by name, and which profile each open log uses with
+ *   the favorites.
  *
  * The field is an ordinary field panel kept outside the grid (a "view:" id),
  * like the other views' panels.
@@ -31,12 +33,12 @@ import { shortKey } from '../lib/fields';
 import { ROLE_LABELS, type Role } from '@core/roles';
 import { StandalonePanel } from './Grid';
 import { MenuItem, MenuLabel, MenuSeparator } from './Menu';
-import { Icon } from './Icon';
 import type { IconName } from '../lib/icons';
-import { ProfileBar, RobotSection, NamesSection, LogsSection } from './RobotSettings';
-import { CameraEditor } from './CameraEditor';
+import { ProfileBar, RobotSection, NamesSection, LogsSection, RoleSlot } from './RobotSettings';
+import { CameraEditor, CAMERA_SLOTS, ANY_CAMERA_FIELD, cameraPatchFor } from './CameraEditor';
 import { SubsystemEditor } from './SubsystemEditor';
-import { guessUnit } from './RobotEditor';
+import { guessUnit, ANGLE } from './RobotEditor';
+import { FieldSlot } from './FieldSlot';
 
 const FIELD = `${VIEW_PANEL_PREFIX}setup-field`;
 
@@ -107,9 +109,6 @@ export function RobotSetup() {
       >
         {ready && logs.length > 0 && <StandalonePanel id={FIELD} />}
         {logs.length === 0 && <div className="view-empty">Open a log from this robot, then drag its fields onto the field.</div>}
-        <div className="rs-drop-hint">
-          <Icon name="target" size={12} /> {over ? 'Drop it to say what it is' : 'Drag a field from the list onto the field to say what it is'}
-        </div>
       </div>
       <div className="rs-side">
         <ProfileBar profile={profile} onProfile={onProfile} />
@@ -128,7 +127,7 @@ export function RobotSetup() {
           ))}
         </div>
         <div className="rs-body scroll">
-          {tab === 'field' && <OnTheField profile={profile} log={log} />}
+          {tab === 'field' && <OnTheField profile={profile} />}
           {tab === 'robot' && <RobotSection profile={profile} />}
           {tab === 'cameras' && <CameraEditor profileId={profile.id} />}
           {tab === 'power' && <SubsystemEditor profileId={profile.id} />}
@@ -179,6 +178,31 @@ function setCamera(profile: RobotProfile, id: string | null, patch: Partial<Came
   }
   updateProfile(profile.id, { cameras: cams });
   return name;
+}
+
+/** A new bar at the robot's center that turns with a logged angle. */
+function addTurningPart(profile: RobotProfile, key: string): void {
+  const unit = guessUnit(key);
+  updateProfile(profile.id, (p) => ({
+    layers: [
+      ...p.layers,
+      {
+        id: newId('layer'),
+        name: shortKey(key, 1),
+        kind: 'rect',
+        x: 0,
+        y: 0,
+        length: Math.min(0.6, p.robot.length * 0.6),
+        width: 0.08,
+        rotation: 0,
+        opacity: 1,
+        color: '#f2c94c',
+        link: { key, unit, offset: 0, invert: false },
+        pivot: { x: 0, y: 0 },
+        parent: null,
+      },
+    ],
+  }));
 }
 
 function choicesFor(f: FieldDrag, profile: RobotProfile): Choice[] {
@@ -252,26 +276,7 @@ function choicesFor(f: FieldDrag, profile: RobotProfile): Choice[] {
       icon: 'plus',
       description: 'A bar at the robot’s center; place and shape it in Robot, Edit the parts',
       apply: () => {
-        updateProfile(profile.id, (p) => ({
-          layers: [
-            ...p.layers,
-            {
-              id: newId('layer'),
-              name: shortKey(f.key, 1),
-              kind: 'rect',
-              x: 0,
-              y: 0,
-              length: Math.min(0.6, p.robot.length * 0.6),
-              width: 0.08,
-              rotation: 0,
-              opacity: 1,
-              color: '#f2c94c',
-              link: { key: f.key, unit, offset: 0, invert: false },
-              pivot: { x: 0, y: 0 },
-              parent: null,
-            },
-          ],
-        }));
+        addTurningPart(profile, f.key);
         toast(`Added a part that turns with ${short}. Place and shape it in Robot, Edit the parts.`);
       },
     });
@@ -341,75 +346,78 @@ function DropMenu({
 // ---------------------------------------------------------------------------
 // On the field: what the field shows, and where it comes from
 
-function OnTheField({ profile, log }: { profile: RobotProfile; log?: LogEntry }) {
+function OnTheField({ profile }: { profile: RobotProfile }) {
+  const logs = useStore(sessionStore, (s) => s.logs);
+  const mine = logs.filter((l) => l.profileId === profile.id);
   const cams = camerasOf(profile);
-  const linked = profile.layers.filter((l) => l.link);
-  const from = (r: Role): { key: string | undefined; how: string } => {
-    const own = profile.roleOverrides[r];
-    if (own) return { key: own, how: 'set here' };
-    const found = log?.roles[r];
-    return found ? { key: found, how: 'found by name' } : { key: undefined, how: '' };
-  };
+  const setLink = (id: string, key: string | null) =>
+    updateProfile(profile.id, (p) => ({
+      layers: p.layers.map((x) =>
+        x.id !== id
+          ? x
+          : key
+            ? {
+                ...x,
+                link: { key, unit: x.link?.unit ?? guessUnit(key), offset: x.link?.offset ?? 0, invert: x.link?.invert ?? false },
+                pivot: x.link ? x.pivot : { x: x.x, y: x.y },
+              }
+            : { ...x, link: null },
+      ),
+    }));
   return (
     <div className="on-field" data-testid="on-the-field">
-      <div className="setting-help">
-        Drag a field from the list onto the field and say what it is. Everything here is saved in the robot profile, so every log from this robot shows it.
-      </div>
       <h3>Robot and paths</h3>
-      {FIELD_ROLES.map((r) => {
-        const { key, how } = from(r);
-        return (
-          <div className="setting-row plain" key={r} data-role={r}>
-            <span>
-              <span className="setting-label">{ROLE_LABELS[r]}</span>
-              <span className={`setting-help ${key ? 'mono' : ''}`} title={key}>
-                {key ? `${shortKey(key, 3)} (${how})` : 'none: drop one on the field'}
-              </span>
-            </span>
-            {profile.roleOverrides[r] && (
-              <button className="btn small" onClick={() => void setProfileRole(profile.id, r, undefined)} title="Go back to finding it by name">
-                Clear
-              </button>
-            )}
-          </div>
-        );
-      })}
+      <div className="slot-stack">
+        {FIELD_ROLES.map((r) => (
+          <RoleSlot key={r} profile={profile} role={r} />
+        ))}
+      </div>
       <h3>Cameras</h3>
-      {!cams.length && <div className="setting-help">No cameras. Drop a camera's pose estimate, tag IDs or tag positions on the field.</div>}
       {cams.map((c) => (
-        <div className="setting-row plain" key={c.id} data-camera={c.name}>
-          <span>
-            <span className="setting-label">
-              <span className="dot" style={{ background: c.color }} /> {c.name}
-              {!profile.cameras.length && <span className="setting-help"> (found by name)</span>}
-            </span>
-            <span className="setting-help mono">
-              {[
-                c.poseKey && `estimate ${shortKey(c.poseKey, 2)}`,
-                c.tagIdsKey && `tag IDs ${shortKey(c.tagIdsKey, 2)}`,
-                c.tagPosesKey && `tag positions ${shortKey(c.tagPosesKey, 2)}`,
-              ]
-                .filter(Boolean)
-                .join(' · ') || 'no fields yet'}
-            </span>
-          </span>
+        <div className="slot-card" key={c.id} data-camera={c.name}>
+          <div className="slot-card-head">
+            <span className="dot" style={{ background: c.color }} />
+            {c.name}
+          </div>
+          <div className="slot-stack">
+            {CAMERA_SLOTS.map((s) => (
+              <FieldSlot
+                key={s.slot}
+                label={s.label}
+                spec={s.spec}
+                value={c[s.slot]}
+                logs={mine}
+                onPick={(key) => void setCamera(profile, c.id, { [s.slot]: key })}
+                onClear={c[s.slot] ? () => void setCamera(profile, c.id, { [s.slot]: undefined }) : undefined}
+                testId={`cam-${s.slot}`}
+              />
+            ))}
+          </div>
         </div>
       ))}
-      {cams.length > 0 && (
-        <button className="link-btn" onClick={() => uiStore.set({ setupTab: 'cameras' })}>
-          Rename cameras, set where they are mounted, or remove one
-        </button>
-      )}
+      <FieldSlot
+        label="Add a camera"
+        spec={ANY_CAMERA_FIELD}
+        value={undefined}
+        onPick={(_key, f) => void setCamera(profile, null, cameraPatchFor(f))}
+        testId="add-camera-slot"
+      />
       <h3>Turning parts</h3>
-      {!linked.length && <div className="setting-help">No part turns with a logged angle. Drop an angle (a number field) on the field.</div>}
-      {linked.map((l) => (
-        <div className="setting-row plain" key={l.id}>
-          <span>
-            <span className="setting-label">{l.name}</span>
-            <span className="setting-help mono">turns with {shortKey(l.link!.key, 3)}</span>
-          </span>
-        </div>
-      ))}
+      <div className="slot-stack">
+        {profile.layers.map((l) => (
+          <FieldSlot
+            key={l.id}
+            label={`${l.name} turns with`}
+            spec={ANGLE}
+            value={l.link?.key}
+            logs={mine}
+            onPick={(key) => setLink(l.id, key)}
+            onClear={l.link ? () => setLink(l.id, null) : undefined}
+            testId="part-link"
+          />
+        ))}
+        <FieldSlot label="Add a turning part" spec={ANGLE} value={undefined} onPick={(key) => addTurningPart(profile, key)} testId="add-part-slot" />
+      </div>
     </div>
   );
 }

@@ -21,7 +21,7 @@ import { useStore } from '../state/store';
 import { panelStore, addFieldToPanel, addFieldsToPanel, panelAccepts, panelTypeForField, PANEL_TITLES } from '../state/panels';
 import { profileStore, profileById, updateProfile } from '../state/profiles';
 import { grid } from './Grid';
-import { useFieldIndex, keyMatchesSearch, shortKey, typeLabels, completeType, typeMatches, type MergedField } from '../lib/fields';
+import { useFieldIndex, keyMatchesSearch, shortKey, typeLabels, completeType, typeMatches, typeLabel, groupByFolder, type MergedField } from '../lib/fields';
 import { setFieldDrag, type FieldDrag } from '../lib/dnd';
 import { client } from '../worker/client';
 import { useSeriesTick } from '../lib/useSeries';
@@ -298,9 +298,9 @@ export function Sidebar() {
             </span>
             <span className="name">{c.name}</span>
             <span className="count">{c.count}</span>
-            {c.field && <span className="kind-badge">{c.field.structName ?? c.field.kind}</span>}
+            {c.field && <span className="kind-badge">{typeLabel(c.field)}</span>}
           </div>
-          {c.field && isOpen && row(c.field, `(${c.field.structName ?? c.field.kind})`, depth + 1)}
+          {c.field && isOpen && row(c.field, `(${typeLabel(c.field)})`, depth + 1)}
           {isOpen && renderNode(c, depth + 1)}
         </div>
       );
@@ -416,20 +416,6 @@ export function Sidebar() {
   );
 }
 
-/** Search results in groups by the folder they are in (the key up to its last '/'), in the order they came. */
-function groupByFolder(list: MergedField[]): { folder: string; fields: MergedField[] }[] {
-  const out = new Map<string, MergedField[]>();
-  for (const f of list) {
-    const folder = f.key.slice(0, f.key.lastIndexOf('/') + 1);
-    const g = out.get(folder);
-    if (g) g.push(f);
-    else out.set(folder, [f]);
-  }
-  // numbers in names in their natural order: 0, 1, 2 ... 10, not 0, 1, 10, 11
-  const natural = (a: MergedField, b: MergedField) => a.key.localeCompare(b.key, undefined, { numeric: true });
-  return [...out.entries()].map(([folder, fields]) => ({ folder, fields: fields.sort(natural) }));
-}
-
 function FieldRow({
   f,
   name,
@@ -476,7 +462,7 @@ function FieldRow({
         <span className="name">{name}</span>
       )}
       {f.unit && <span className="unit">{f.unit}</span>}
-      <span className="kind-badge">{f.structName ?? f.kind}</span>
+      <span className="kind-badge">{typeLabel(f)}</span>
       {logs.length > 1 && (
         <span className="log-dots">
           {logs.map((l) => (

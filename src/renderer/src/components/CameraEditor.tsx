@@ -5,52 +5,53 @@
  * empty is simply not drawn. With no cameras listed, Brownout uses the ones
  * it finds from field names in each log.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { NumberInput } from './NumberInput';
 import { profileStore, updateProfile, newId, CAMERA_COLORS, type Camera } from '../state/profiles';
 import { sessionStore } from '../state/session';
 import { uiStore, toast } from '../state/ui';
 import { useStore } from '../state/store';
 import { detectedCameras } from '../lib/vision';
-import { shortKey, type MergedField } from '../lib/fields';
-import { FieldPicker } from './FieldPicker';
+import type { FieldLike, FieldSpec } from '../lib/fields';
+import { FieldSlot } from './FieldSlot';
 import { Icon } from './Icon';
 
-type Slot = 'poseKey' | 'tagIdsKey' | 'tagPosesKey';
-const SLOTS: { slot: Slot; label: string; help: string; filter: (f: MergedField) => boolean }[] = [
+export type CameraSlot = 'poseKey' | 'tagIdsKey' | 'tagPosesKey';
+const POSES = ['Pose2d', 'Pose3d'];
+/** A camera's three fields, each optional: what each takes. */
+export const CAMERA_SLOTS: { slot: CameraSlot; label: string; spec: FieldSpec }[] = [
   {
     slot: 'poseKey',
-    label: 'Pose estimate',
-    help: 'Where this camera thinks the robot is: a Pose2d or Pose3d (or an array of them), or a Limelight botpose array. Draws a ghost robot.',
-    filter: (f) =>
-      ((f.kind === 'struct' || f.kind === 'struct[]') && ['Pose2d', 'Pose3d'].includes(f.structName ?? '')) ||
-      (f.kind === 'number[]' && /botpose/i.test(f.key)),
+    label: 'Estimate',
+    spec: {
+      types: [...POSES, ...POSES.map((p) => `${p}[]`)],
+      also: { label: 'botpose', test: (f) => f.kind === 'number[]' && /botpose/i.test(f.key) },
+    },
   },
-  {
-    slot: 'tagIdsKey',
-    label: 'Tag IDs in view',
-    help: 'A number array with the IDs of the AprilTags the camera sees (or a Limelight botpose array). Draws a line to each tag and lights it up.',
-    filter: (f) => f.kind === 'number[]',
-  },
-  {
-    slot: 'tagPosesKey',
-    label: 'Tag poses in view',
-    help: 'A Pose3d[] or Pose2d[] with where the camera thinks the tags are, for teams that log positions instead of IDs.',
-    filter: (f) => f.kind === 'struct[]' && ['Pose2d', 'Pose3d'].includes(f.structName ?? ''),
-  },
+  { slot: 'tagIdsKey', label: 'Tag IDs', spec: { types: ['number[]'] } },
+  { slot: 'tagPosesKey', label: 'Tag positions', spec: { types: ['Pose3d[]', 'Pose2d[]'] } },
 ];
+
+/** Any field a camera can use, and where a new camera puts it. */
+export const ANY_CAMERA_FIELD: FieldSpec = {
+  types: ['Pose2d', 'Pose3d', 'Pose2d[]', 'Pose3d[]', 'number[]'],
+  label: 'any camera field',
+};
+export function cameraPatchFor(f: FieldLike): Partial<Camera> {
+  if (f.kind === 'number[]') return /botpose/i.test(f.key) ? { poseKey: f.key, tagIdsKey: f.key } : { tagIdsKey: f.key };
+  if (f.kind === 'struct[]') return { tagPosesKey: f.key };
+  return { poseKey: f.key };
+}
 
 export function CameraEditor({ profileId }: { profileId: string }) {
   // select the list, then find: the selector must not close over a prop
   const profile = useStore(profileStore, (s) => s.profiles).find((p) => p.id === profileId);
   const logs = useStore(sessionStore, (s) => s.logs);
   const mine = useMemo(() => logs.filter((l) => l.profileId === profileId), [logs, profileId]);
-  const [pick, setPick] = useState<{ cam: string; slot: Slot } | null>(null);
   if (!profile) return null;
   const found = mine.flatMap((l) => detectedCameras(l)).filter((c, i, a) => a.findIndex((x) => x.id === c.id) === i);
   const setCams = (fn: (c: Camera[]) => Camera[]) => updateProfile(profileId, (p) => ({ cameras: fn(p.cameras) }));
   const patch = (id: string, c: Partial<Camera>) => setCams((cams) => cams.map((x) => (x.id === id ? { ...x, ...c } : x)));
-  const inLogs = (key: string) => mine.length === 0 || mine.some((l) => l.fields.some((f) => f.key === key));
   const add = () =>
     setCams((cams) => [
       ...cams,
@@ -71,7 +72,6 @@ export function CameraEditor({ profileId }: { profileId: string }) {
       ...found.filter((f) => !cams.some((c) => c.tagIdsKey === f.tagIdsKey && c.poseKey === f.poseKey)).map((f) => ({ ...f, id: newId('cam') })),
     ]);
   };
-  const slotDef = pick ? SLOTS.find((s) => s.slot === pick.slot)! : null;
 
   return (
     <div className="subsys-editor" data-testid="camera-editor">
@@ -101,29 +101,20 @@ export function CameraEditor({ profileId }: { profileId: string }) {
               <Icon name="trash" size={13} />
             </button>
           </div>
-          {SLOTS.map((s) => {
-            const key = c[s.slot];
-            const missing = !!key && !inLogs(key);
-            return (
-              <div className="cam-slot" key={s.slot} title={s.help}>
-                <span className="cam-slot-label">{s.label}</span>
-                <span
-                  className={`cam-slot-key mono${missing ? ' warn-text' : ''}`}
-                  title={key ? `${key}${missing ? '\nNot in the open logs for this robot' : ''}` : s.help}
-                >
-                  {missing && <Icon name="warning" size={11} />} {key ? shortKey(key, 4) : <span className="hint">not logged</span>}
-                </span>
-                <button className="btn small" onClick={() => setPick({ cam: c.id, slot: s.slot })}>
-                  Pick
-                </button>
-                {key && (
-                  <button className="chip-btn" title="Leave this empty" onClick={() => patch(c.id, { [s.slot]: undefined })}>
-                    <Icon name="close" size={10} />
-                  </button>
-                )}
-              </div>
-            );
-          })}
+          <div className="cam-slots">
+            {CAMERA_SLOTS.map((s) => (
+              <FieldSlot
+                key={s.slot}
+                label={s.label}
+                spec={s.spec}
+                value={c[s.slot]}
+                logs={mine}
+                onPick={(key) => patch(c.id, { [s.slot]: key })}
+                onClear={() => patch(c.id, { [s.slot]: undefined })}
+                testId={`cam-${s.slot}`}
+              />
+            ))}
+          </div>
           <div
             className="cam-slot"
             title="Where the camera sits on the robot, measured from its center. Lines to tags start there. Leave empty to draw them from the robot center."
@@ -150,9 +141,6 @@ export function CameraEditor({ profileId }: { profileId: string }) {
           Copy the detected cameras here
         </button>
       </div>
-      {pick && slotDef && (
-        <FieldPicker title={`${slotDef.label}`} filter={slotDef.filter} onClose={() => setPick(null)} onPick={(key) => patch(pick.cam, { [pick.slot]: key })} />
-      )}
     </div>
   );
 }

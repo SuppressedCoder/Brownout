@@ -244,3 +244,25 @@ export const ROLE_LABELS: Record<Role, string> = {
   chassisSpeeds: 'Chassis speeds',
   matchTime: 'Match time',
 };
+
+/**
+ * The types a role takes, as the app names them ("Pose2d", "Pose3d[]",
+ * "number"): what a field box for the role lists and accepts.
+ */
+export function roleTypes(role: Role): string[] {
+  const spec = SPECS[role];
+  const out: string[] = [];
+  for (const k of spec.kinds ?? []) {
+    if (k === 'struct') out.push(...(spec.structs ?? []));
+    else if (k === 'struct[]') out.push(...(spec.structs ?? []).map((s) => `${s}[]`));
+    else out.push(k);
+  }
+  return out;
+}
+
+/** Every role, in the groups Robot setup's Field names lists them. */
+export const ROLE_GROUPS: { title: string; roles: Role[] }[] = [
+  { title: 'Power', roles: ['batteryVoltage', 'totalCurrent', 'brownout', 'pdhChannelCurrents', 'totalEnergy'] },
+  { title: 'Code and health', roles: ['loopTime', 'canUtilization', 'console', 'gitSha', 'autoRoutine', 'matchTime'] },
+  { title: 'On the field', roles: ['robotPose', 'activePath', 'targetPose', 'visionPose', 'swerveMeasured', 'swerveSetpoint', 'chassisSpeeds'] },
+];

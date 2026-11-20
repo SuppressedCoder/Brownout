@@ -24,7 +24,8 @@ import { fieldAssetTicker } from '../lib/fieldAssets';
 import { T } from '../lib/theme';
 import { withAlpha } from '../lib/colors';
 import { shortKey } from '../lib/fields';
-import { FieldPicker } from './FieldPicker';
+import { FieldSlot } from './FieldSlot';
+import type { FieldSpec } from '../lib/fields';
 import { Icon } from './Icon';
 
 const MAX_LAYERS = 24;
@@ -33,6 +34,9 @@ const MAX_SVG_BYTES = 300_000;
 const PART_COLORS = ['#f2c94c', '#56ccf2', '#bb6bd9', '#6fcf97', '#f2994a', '#eb5757', '#e0e0e0'];
 const snap = (v: number) => Math.round(v * 200) / 200;
 const fmt = (v: number) => String(Math.round(v * 1000) / 1000);
+
+/** A part turns with a logged number (an angle). */
+export const ANGLE: FieldSpec = { types: ['number'], label: 'number (angle)' };
 
 /** Undo a linked part's turn about its pivot, for a point in the robot frame. */
 function undoTurn(l: Layer, x: number, y: number, preview: number): { x: number; y: number } {
@@ -186,7 +190,6 @@ export function RobotEditor({ profileId }: { profileId: string }) {
   const [selected, setSelected] = useState<string | null>(null);
   // the test angle, in degrees: a store so the slider redraws only the preview
   const test = useMemo(() => createStore({ deg: 0 }), []);
-  const [picking, setPicking] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const view = useRef({ cx: 0, cy: 0, scale: 100 });
   // The camera stays where the user puts it (wheel zooms, dragging empty space pans). It fits the
@@ -688,20 +691,19 @@ export function RobotEditor({ profileId }: { profileId: string }) {
               </select>
             </div>
             <div className="robot-link">
-              <div className="robot-pair">
-                <span title="The part turns around its pivot by the value of a logged number field">Turns with</span>
-                <span className={`cam-slot-key mono`} title={sel.link?.key ?? 'This part does not move'}>
-                  {sel.link ? shortKey(sel.link.key, 4) : <span className="hint">nothing (it stays still)</span>}
-                </span>
-                <button className="btn small" onClick={() => setPicking(true)} data-testid="layer-link">
-                  Pick
-                </button>
-                {sel.link && (
-                  <button className="chip-btn" title="Stop turning this part" onClick={() => patch(sel.id, { link: null })}>
-                    <Icon name="close" size={10} />
-                  </button>
-                )}
-              </div>
+              <FieldSlot
+                label="Turns with"
+                spec={ANGLE}
+                value={sel.link?.key}
+                onPick={(key) =>
+                  patch(sel.id, {
+                    link: { key, unit: sel.link?.unit ?? guessUnit(key), offset: sel.link?.offset ?? 0, invert: sel.link?.invert ?? false },
+                    pivot: sel.link ? sel.pivot : { x: sel.x, y: sel.y },
+                  })
+                }
+                onClear={() => patch(sel.id, { link: null })}
+                testId="layer-link"
+              />
               {sel.link && (
                 <>
                   <div className="robot-pair">
@@ -781,20 +783,6 @@ export function RobotEditor({ profileId }: { profileId: string }) {
           </div>
         )}
       </div>
-      {picking && sel && (
-        <FieldPicker
-          title="Angle field for this part"
-          filter={(f) => f.kind === 'number'}
-          onClose={() => setPicking(false)}
-          onPick={(key) => {
-            patch(sel.id, {
-              link: { key, unit: sel.link?.unit ?? guessUnit(key), offset: sel.link?.offset ?? 0, invert: sel.link?.invert ?? false },
-              pivot: sel.link ? sel.pivot : { x: sel.x, y: sel.y },
-            });
-            setPicking(false);
-          }}
-        />
-      )}
     </div>
   );
 }
