@@ -28,7 +28,7 @@ import { sessionStore, openSources, removeLog, arrangeSharedLogs, setAlignMode, 
 import { timeStore, applySharedTime, type TimeState } from '../state/time';
 import type { AlignMode } from '@core/alignment';
 
-interface SharedSession {
+export interface SharedSession {
   logs: SharedLog[];
   alignMode: AlignMode;
   wholeLog: boolean;
@@ -57,7 +57,8 @@ export function whenPrimary(fn: () => void): void {
   else onPrimary.push(fn);
 }
 
-function sessionNow(): SharedSession {
+/** The logs and what is set on them, as the windows share them (also what undo keeps, lib/undo.ts). */
+export function sessionNow(): SharedSession {
   const s = sessionStore.get();
   return {
     logs: s.logs.filter((l) => l.path).map((l) => ({ path: l.path!, manualOffset: l.manualOffset, visible: l.visible, colorIndex: l.colorIndex })),
@@ -138,15 +139,23 @@ function takeTime(t: SharedTime): void {
   sharedTime = JSON.stringify(lastTime);
 }
 
-let reconciling = false;
+let reconciling: Promise<void> | null = null;
 let again = false;
 /** Open and close logs until this window has the shared ones, then take their order, offsets and the shared time. */
-async function reconcile(): Promise<void> {
+function reconcile(): Promise<void> {
   if (reconciling) {
     again = true;
-    return;
+    return reconciling;
   }
-  reconciling = true;
+  // cleared once it settles (reconcileNow may finish without waiting, before this assignment)
+  const p: Promise<void> = reconcileNow().finally(() => {
+    reconciling = null;
+    if (again) void reconcile();
+  });
+  reconciling = p;
+  return p;
+}
+async function reconcileNow(): Promise<void> {
   busy++;
   try {
     do {
@@ -168,12 +177,20 @@ async function reconcile(): Promise<void> {
     } while (again);
   } finally {
     busy--;
-    reconciling = false;
   }
   // opening logs may have fitted the view: take the shared time again
   if (sharedTime) takeTime(JSON.parse(sharedTime) as SharedTime);
   // a log that would not open here: tell the others
   sessionChanged();
+}
+
+/**
+ * Make this window's logs match a shape (undo and redo, lib/undo.ts): logs missing are opened again
+ * from their files, others closed, then order, offsets and the rest are set. The other windows follow.
+ */
+export function applySessionShape(shape: SharedSession): Promise<void> {
+  target = shape;
+  return reconcile();
 }
 
 function receive(kind: 'session' | 'time', data: unknown): void {

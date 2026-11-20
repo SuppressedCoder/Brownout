@@ -26,6 +26,7 @@ import { VideoReview, PowerView } from './components/Views';
 import { startVideoOffers } from './lib/videoOffer';
 import { addCustomField } from './lib/fieldAssets';
 import { startWindowSync, whenPrimary } from './lib/windowSync';
+import { startUndo } from './lib/undo';
 
 /** Below this window width the sidebar hides itself. */
 const NARROW = 980;
@@ -73,6 +74,8 @@ export function App() {
       if (!joined && info && !info.cliFiles) await restoreSession();
       // only the primary window saves the session (the others would save the same)
       whenPrimary(startSessionSaving);
+      // undo starts from the state the app opened in
+      startUndo();
     })();
     return () => {
       offFiles?.();

@@ -17,7 +17,7 @@ export function Help() {
   const moveTime = useStore(settingsStore, (s) => s.panelsMoveTime);
   const close = () => uiStore.set({ helpOpen: false });
   const tab = useStore(uiStore, (s) => s.helpTab);
-  const groups: ActionGroup[] = ['Playback', 'Navigate', 'Zoom', 'Files & layout', 'View', 'Robot'];
+  const groups: ActionGroup[] = ['Playback', 'Navigate', 'Zoom', 'Edit', 'Files & layout', 'View', 'Robot'];
   const mouse: [string, string][] = [
     ['Timeline: press / drag in the lanes', 'Place / scrub the cursor; it snaps to mode changes and bookmarks (hold Alt: no snap)'],
     ['Timeline: drag the time scale, or middle-drag', 'Pan'],
@@ -41,6 +41,7 @@ export function Help() {
       'Pair a video frame with a log moment (wheel zooms the video to single frames); pair a second, late moment if the video drifts',
     ],
     ['Commands: click a run', 'Jump to where that command started'],
+    ['Commands: click a name', "Go to that command's next run (Shift+click: the one before)"],
     ['Any panel: hover its top-right corner', 'Copy the panel as an image'],
     ['Field tree: drag a field', 'Onto a panel to add it; onto an empty grid to create the best panel'],
     ['Field tree: double-click a field', 'Add it to the active panel'],

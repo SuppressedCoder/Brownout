@@ -304,7 +304,7 @@ function Keybinds() {
     };
   }, [capturing]);
 
-  const groups: ActionGroup[] = ['Playback', 'Navigate', 'Zoom', 'Files & layout', 'View', 'Robot'];
+  const groups: ActionGroup[] = ['Playback', 'Navigate', 'Zoom', 'Edit', 'Files & layout', 'View', 'Robot'];
   return (
     <>
       <div className="setting-help">

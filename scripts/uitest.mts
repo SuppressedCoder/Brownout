@@ -1121,6 +1121,28 @@ async function main() {
       }
     }
     check('clicking a command run moves the cursor to its start', jumped !== null, String(jumped));
+    // clicking a command's name goes to its next run; the first row's first run when there is no cursor
+    await page.evaluate(`window.__brownout.timeStore.set({ cursor: null })`);
+    await page.mouse.move(cmdBox.x + 40, cmdBox.y + 37);
+    const nameTip = await page.locator('[data-testid=commands-chart] canvas').getAttribute('title');
+    await page.mouse.click(cmdBox.x + 40, cmdBox.y + 37);
+    check(
+      'clicking a command name goes to its next run',
+      (nameTip ?? '').includes('next run') && (await state<number | null>(page, 's.timeStore.get().cursor')) !== null,
+      String(nameTip),
+    );
+    // the filter keeps only commands whose names match
+    const filter = page.locator('.commands-panel input[placeholder="Filter commands"]');
+    await filter.fill('zzzz-no-such-command');
+    await page.waitForTimeout(200);
+    const none = Number(await page.locator('[data-testid=commands-chart]').getAttribute('data-rows'));
+    const noneMsg = await page.locator('.commands-none').count();
+    await filter.fill('');
+    await page.waitForTimeout(200);
+    check(
+      'the commands filter hides commands that do not match, and says so',
+      none === 0 && noneMsg === 1 && Number(await page.locator('[data-testid=commands-chart]').getAttribute('data-rows')) === cmdRows,
+    );
   }
   // the panel shows a message while it has no logs, then a new canvas when they come (as on every relaunch):
   // the new canvas must be sized, drawn and clickable
@@ -1867,6 +1889,50 @@ async function main() {
   }
   await page.waitForTimeout(700);
   check('a log listed twice in the saved session opens once', (await state<number>(page, 's.sessionStore.get().logs.length')) === 3);
+
+  // ------------------------------------------------------------------ undo and redo
+  console.log('Undo and redo');
+  {
+    const count = () => state<number>(page, 'Object.keys(s.panelStore.get().panels).filter(k => !k.startsWith("view:")).length');
+    const nLogs = () => state<number>(page, 's.sessionStore.get().logs.length');
+    await page.keyboard.press('Control+1');
+    await page.waitForTimeout(300);
+    const before = await count();
+    await page.locator('[data-testid=add-panel]').first().click();
+    await page.locator('.menu .menu-item', { hasText: 'Table' }).first().click();
+    await page.waitForTimeout(800);
+    const added = await count();
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(600);
+    const undone = await count();
+    await page.keyboard.press('Control+Shift+Z');
+    await page.waitForTimeout(600);
+    check(
+      'Ctrl+Z removes a panel just added, Ctrl+Shift+Z brings it back',
+      added === before + 1 && undone === before && (await count()) === before + 1,
+      `${before} ${added} ${undone}`,
+    );
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(600);
+    const order = await state<string>(page, 'JSON.stringify(s.sessionStore.get().logs.map(l => [l.path, l.colorIndex]))');
+    await page.evaluate(`window.__brownout.timeStore.set({ cursor: 42.5 })`);
+    const cursorBefore = await state<number | null>(page, 's.timeStore.get().cursor');
+    const second = await state<string>(page, 's.sessionStore.get().logs[1].name');
+    await page.locator(`.log-chip button[aria-label="Close ${second}"]`).click();
+    await page.waitForTimeout(800);
+    const closed = await nLogs();
+    await page.keyboard.press('Control+z');
+    for (let i = 0; i < 50 && (await nLogs()) < 3; i++) await page.waitForTimeout(200);
+    await page.waitForTimeout(500);
+    check(
+      'Ctrl+Z reopens a log just closed, in its place and color',
+      closed === 2 && (await state<string>(page, 'JSON.stringify(s.sessionStore.get().logs.map(l => [l.path, l.colorIndex]))')) === order,
+    );
+    check(
+      'undo leaves time alone and keeps the panels',
+      (await count()) === before && (await state<number | null>(page, 's.timeStore.get().cursor')) === cursorBefore,
+    );
+  }
 
   // ------------------------------------------------------------------ several windows
   console.log('Several windows');

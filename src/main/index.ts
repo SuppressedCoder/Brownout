@@ -195,6 +195,13 @@ function buildMenu() {
       ],
     },
     {
+      label: 'Edit',
+      submenu: [
+        { label: 'Undo', click: action('undo') },
+        { label: 'Redo', click: action('redo') },
+      ],
+    },
+    {
       label: 'View',
       submenu: [
         { label: 'Zoom to the match', click: action('zoomMatch') },

@@ -97,6 +97,8 @@ export interface CommandsSettings {
   source: string;
   /** A string[] field listing the running commands; empty = found automatically. */
   sourceKey?: string;
+  /** Show only commands whose names contain every word of this. */
+  filter?: string;
 }
 export interface VideoSettings {
   type: 'video';
