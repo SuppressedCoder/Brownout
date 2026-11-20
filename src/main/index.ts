@@ -105,6 +105,8 @@ function createWindow(files: string[] = []) {
     minHeight: 600,
     backgroundColor: '#15171c',
     title: 'Brownout',
+    // the menu bar shows only while Alt is pressed (Windows and Linux): everything in it is also in the app
+    autoHideMenuBar: true,
     show: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),

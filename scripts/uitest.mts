@@ -123,6 +123,13 @@ async function main() {
   check('every header button has an icon or a text label', (await page.locator('.header svg.icon').count()) >= 8);
   check('no emoji or symbol characters in the main view', (await pictographs(page)) === '', await pictographs(page));
   check('no Demo button in the header', (await page.locator('.header button', { hasText: /^Demo$/ }).count()) === 0);
+  check(
+    'the menu bar stays hidden until Alt is pressed',
+    await app.evaluate(({ BrowserWindow }) => {
+      const w = BrowserWindow.getAllWindows()[0];
+      return process.platform === 'darwin' || (w.isMenuBarAutoHide() && !w.isMenuBarVisible());
+    }),
+  );
   await page.locator('.header > button').first().click();
   check('hamburger hides the sidebar', (await page.locator('.sidebar').count()) === 0);
   await page.locator('.header > button').first().click();
