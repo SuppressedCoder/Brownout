@@ -624,6 +624,28 @@ async function main() {
     );
     await page.mouse.dblclick(field.x + field.width / 2, field.y + field.height / 2);
     check('double-click fits it again', (await state<number>(page, `Object.values(s.panelStore.get().panels).find(p => p.type === 'field').zoom`)) === 1);
+    // zoom out past the whole field and drag it off to the side: nothing snaps back by itself
+    const fieldView = () =>
+      state<{ zoom?: number; center?: [number, number] }>(
+        page,
+        `(() => { const p = Object.values(s.panelStore.get().panels).find(p => p.type === 'field'); return { zoom: p.zoom, center: p.center }; })()`,
+      );
+    await page.mouse.move(field.x + field.width / 2, field.y + field.height / 2);
+    await page.mouse.wheel(0, 600);
+    await page.waitForTimeout(150);
+    const out = await fieldView();
+    await page.mouse.move(field.x + field.width / 2, field.y + field.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(field.x + field.width / 2 + field.width * 0.45, field.y + field.height / 2, { steps: 6 });
+    await page.mouse.up();
+    const away = await fieldView();
+    check(
+      'the field zooms out past its edges and drags off it, staying where it is put',
+      (out.zoom ?? 1) < 1 && !!away.center && (away.center[0] < 0 || away.center[0] > 17) && away.zoom === out.zoom,
+      JSON.stringify({ out, away }),
+    );
+    await page.locator('[data-testid=field-fit]').first().click();
+    check('Fit brings it back', (await fieldView()).zoom === 1 && (await fieldView()).center === undefined);
   }
   check('zooming is view state, not a layout change', (await presetText(page)) === 'Quick Look', await presetText(page));
 
@@ -1191,6 +1213,8 @@ async function main() {
     linked.link?.key === '/Shooter/TurretPositionRad' && linked.link.unit === 'rad' && linked.pivot.x === 0.3,
     JSON.stringify(linked),
   );
+  // where the robot is on screen: the preview says (center x, center y, pixels per meter)
+  const robotView = async () => ((await page.locator('[data-testid=robot-preview]').getAttribute('data-view')) ?? '0 0 1').split(' ').map(Number);
   const prevBox = await page.locator('[data-testid=robot-preview]').boundingBox();
   if (prevBox) {
     const clip = { x: prevBox.x, y: prevBox.y, width: prevBox.width, height: prevBox.height };
@@ -1200,9 +1224,9 @@ async function main() {
     check('the test angle turns the linked part in the preview', !before.equals(await page.screenshot({ clip })));
     await page.locator('[data-testid=robot-test-angle]').fill('0');
     // the robot's front is up: the part at 0.3 m forward sits above the center; drag it right and down
-    const scalePx = (Math.min(prevBox.width, prevBox.height - 24) / (0.9 * 1.25)) * 0.3;
-    const sx = prevBox.x + prevBox.width / 2;
-    const sy = prevBox.y + prevBox.height / 2 + 6 - scalePx;
+    const [vcx, vcy, vsc] = await robotView();
+    const sx = prevBox.x + vcx;
+    const sy = prevBox.y + vcy - 0.3 * vsc;
     await page.mouse.move(sx, sy);
     await page.mouse.down();
     await page.mouse.move(sx + 40, sy + 30, { steps: 4 });
@@ -1212,6 +1236,34 @@ async function main() {
       'dragging in the preview moves the part (and its pivot with it)',
       dragged.x < 0.3 && dragged.y < 0 && dragged.pivot.x === dragged.x && dragged.pivot.y === dragged.y,
       JSON.stringify(dragged),
+    );
+    // the view stays where it is while a part moves (it used to refit and run away from the pointer)
+    check(
+      'dragging a part leaves the preview where it is',
+      JSON.stringify(await robotView()) === JSON.stringify([vcx, vcy, vsc]),
+      (await robotView()).join(' '),
+    );
+    // undo in the editor opened from Settings, with the test-angle slider still holding the keyboard
+    await page.waitForTimeout(600);
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(400);
+    const back = await state<{ x: number; y: number }>(page, 's.profileStore.get().profiles[0].layers[0]');
+    check('Ctrl+Z in the robot editor (opened from Settings) undoes the drag', back.x === 0.3 && back.y === 0, JSON.stringify(back));
+    await page.locator('[data-testid=robot-redo]').click();
+    await page.waitForTimeout(400);
+    const again = await state<{ x: number; y: number }>(page, 's.profileStore.get().profiles[0].layers[0]');
+    check('...and its Redo button does it again', again.x === dragged.x && again.y === dragged.y, JSON.stringify(again));
+    // the wheel zooms the preview around the pointer; Fit shows the whole robot again
+    await page.mouse.move(prevBox.x + prevBox.width * 0.7, prevBox.y + prevBox.height * 0.3);
+    await page.mouse.wheel(0, -400);
+    await page.waitForTimeout(250);
+    const zoomedIn = await robotView();
+    await page.locator('[data-testid=robot-fit]').click();
+    await page.waitForTimeout(250);
+    check(
+      'the wheel zooms the robot preview, and Fit shows the whole robot again',
+      zoomedIn[2] > vsc * 1.2 && (await robotView())[2] > 0 && Math.abs((await robotView())[0] - vcx) < 1,
+      `${zoomedIn.join(' ')} / ${(await robotView()).join(' ')}`,
     );
   }
   const svgPath = resolve(outDir, 'ui-test-part.svg');
@@ -1276,11 +1328,9 @@ async function main() {
     // drag the pivot marker: the pivot moves, the part stays
     const pb = await page.locator('[data-testid=robot-preview]').boundingBox();
     if (pb) {
-      const ls = await parts();
-      const span = Math.max(0.9, 0.9, ...ls.map((l) => 2 * Math.max(Math.abs(l.x) + l.length / 2, Math.abs(l.y) + l.width / 2))) * 1.25;
-      const sc = Math.max(20, Math.min(pb.width, pb.height - 24) / Math.max(span, 0.5));
-      const px = pb.x + pb.width / 2 - r1.pivot.y * sc;
-      const py = pb.y + pb.height / 2 + 6 - r1.pivot.x * sc;
+      const [ccx, ccy, sc] = await robotView();
+      const px = pb.x + ccx - r1.pivot.y * sc;
+      const py = pb.y + ccy - r1.pivot.x * sc;
       await page.mouse.move(px, py);
       await page.mouse.down();
       await page.mouse.move(px + 20, py, { steps: 4 });

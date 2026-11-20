@@ -43,6 +43,7 @@ npm run dev       # run the app
 19. **Every data source is optional.** Vision, controllers and commands differ from team to team: a camera is whichever of its three fields the robot logs (pose estimate, tag IDs, tag poses), and whatever is missing is simply not drawn or reported. Detect the common layouts from field names (`detectCameras`, `controllerKeys`, `detectCommandSources` in `src/core`) so things work with no setup, and always leave a way to pick the field by hand.
 20. **A menu item that opens a dialog closes its menu first** (`onClick={() => (close(), open())}`), or the menu stays open behind the dialog.
 21. **Reusing AdvantageScope code** (BSD-3, Littleton Robotics) is allowed: copy into `src/core/vendor/advantagescope/` with its license header and add the notice to `THIRD_PARTY_NOTICES.md`.
+22. **A view the user can move never moves by itself.** If a canvas can be zoomed or panned (the 2D field, the robot editor's preview), it does not auto-fit, recenter or clamp to its content: the user zooms with the wheel and drags with the left button, also past the edges, and gets back with **Fit** or a double-click. Auto-fitting something the user is dragging feeds back on itself (the part runs from the pointer). Fit once when it first appears, and only again when asked.
 
 ## Adding things
 

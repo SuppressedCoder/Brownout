@@ -276,7 +276,7 @@ Any panel that lacks what it needs says so and how to log it, and Log info & hea
   - **the field picture:** the real 2024 to 2026 fields, or your own from a WPILib or PathWeaver field JSON (Display menu); the season is picked in the toolbar;
   - **robots:** one per log, sized from the robot profile, bumpers in the alliance color, with a trail (the trail menu sets how long). The robot's parts from the robot editor turn with their logged angles;
   - **Pose field** adds other positions (a vision estimate, a setpoint), drawn as labeled ghosts;
-  - **zoom and pan:** the wheel zooms, a drag pans, double-click fits the whole field; **Fit** when zoomed;
+  - **zoom and pan:** the wheel zooms (also out past the field), a drag pans (also off the field), double-click or **Fit** shows the whole field again. The view never zooms or recenters by itself;
   - **Display menu:**
     - field picture and its brightness;
     - the active path and the target pose (PathPlanner);
@@ -485,6 +485,8 @@ A preset says where panels go; a **robot profile** describes the robot and appli
   - **turn point:** choose its center, back end, front end, left side or right side, or **drag the round pivot marker**. When the pivot sits at the part's center, a plain drag moves the part and **Alt-drag** moves the pivot;
   - **attached to another part:** the part moves with that part's turn, and its own angle adds on top (a wrist on an arm, a claw on a turret);
   - **the test angle** slider previews every linked part turning;
+  - **the preview's view is yours:** the wheel zooms around the pointer, dragging empty space (or the middle button anywhere) moves the view, and it is not held to the robot. It fits the robot when the editor opens; **Fit** or a double-click on empty space fits it again. It never refits while you drag a part;
+  - **Undo and Redo** buttons in its header, and Ctrl+Z / Ctrl+Shift+Z, take back part changes (also when the editor was opened from Settings);
 - **export and import** a profile as one file, pictures included, to share a setup with the team.
 
 ## 13. Reports and exports
@@ -576,10 +578,11 @@ A preset says where panels go; a **robot profile** describes the robot and appli
 | Graph | wheel / drag on an axis | zoom / pan that axis only |
 | Graph | double-click | back to auto-fit |
 | Graph | click the legend strip | open the full legend |
-| 2D field | wheel / drag / double-click | zoom / pan / fit |
+| 2D field | wheel / drag / double-click | zoom / pan / fit (zoom out and pan past the field freely) |
 | Commands | click a run | go to where it started |
 | Console, Compare, Statistics, Power, Moments | click a line or value | go to that moment |
 | Robot editor | drag the round marker (Alt-drag when it sits at the part's center) | move the pivot |
+| Robot editor | wheel / drag empty space / double-click empty space | zoom / move the view / fit the robot |
 | Sync view | wheel on the video timeline | zoom down to single frames |
 | Sync view | Alt while picking on the log strip | no snapping to markers |
 

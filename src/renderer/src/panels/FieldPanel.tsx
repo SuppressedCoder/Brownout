@@ -7,7 +7,8 @@
  * The season's real field picture is drawn underneath (lib/fieldAssets.ts).
  *
  * Wheel zooms around the pointer, drag pans, double-click (or Fit) shows the
- * whole field again.
+ * whole field again. Nothing zooms or recenters by itself, and the view is not
+ * held to the field: zoom out past it, drag it anywhere.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { panelStore, updatePanel, type FieldSettings } from '../state/panels';
@@ -35,6 +36,8 @@ import { Toolbar, ToolButton, ToolSelect, ToolSpacer, ToolGroup } from '../compo
 import { FieldPicker } from '../components/FieldPicker';
 
 const MAX_ZOOM = 40;
+/** Zoomed out to a fifth of the fitted size at most: past the field is fine, Fit brings it back. */
+const MIN_ZOOM = 0.2;
 const DEFAULT_BRIGHTNESS = 0.55;
 
 /** Field ↔ canvas mapping of the last draw. */
@@ -332,13 +335,9 @@ function useFieldInteraction(ref: React.RefObject<HTMLCanvasElement | null>, id:
       const s = panelStore.get().panels[id] as FieldSettings | undefined;
       const zoom = s?.zoom ?? 1;
       const factor = Math.exp((e.deltaY > 0 ? -1 : 1) * 0.18 * Math.min(3, Math.abs(e.deltaY) / 50 + 0.5));
-      const next = Math.min(MAX_ZOOM, Math.max(1, zoom * factor));
+      const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * factor));
       if (next === zoom) return;
-      if (next === 1) {
-        updatePanel<FieldSettings>(id, { zoom: 1, center: undefined });
-        return;
-      }
-      // keep the field point under the pointer where it is
+      // keep the field point under the pointer where it is (no snapping back to the whole field: Fit does that)
       const [fx, fy] = toField(v, x, y);
       const scale = v.fit * next;
       const center: [number, number] = [fx - ((x - v.cx) / scale) * v.sign, fy + ((y - v.cy) / scale) * v.sign];
@@ -433,12 +432,12 @@ function drawField(dc: DrawContext, id: string, viewRef: React.MutableRefObject<
   const W = season.width;
   const pad = 14;
   const fit = Math.max(1e-6, Math.min((width - pad * 2) / L, (height - pad * 2) / W));
-  const zoom = Math.min(MAX_ZOOM, Math.max(1, settings.zoom ?? 1));
+  const zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, settings.zoom ?? 1));
   const scale = fit * zoom;
   const sign: 1 | -1 = settings.rotate ? -1 : 1;
   // Keep at least part of the field in view
-  let center: [number, number] = settings.center ?? [L / 2, W / 2];
-  center = [Math.min(L, Math.max(0, center[0])), Math.min(W, Math.max(0, center[1]))];
+  // the view goes wherever it is dragged, also off the field: Fit (or double-click) brings it back
+  const center: [number, number] = settings.center ?? [L / 2, W / 2];
   const cx = width / 2;
   const cy = height / 2;
   viewRef.current = { cx, cy, scale, center, sign, fit };
@@ -784,7 +783,7 @@ function drawField(dc: DrawContext, id: string, viewRef: React.MutableRefObject<
   ctx.textAlign = 'right';
   ctx.textBaseline = 'bottom';
   ctx.fillText(
-    `${season.name} · ${L.toFixed(2)} × ${W.toFixed(2)} m${session.normalizeAlliance ? ' · normalized to blue' : ''}${zoom > 1 ? ` · ${zoom.toFixed(1)}×` : ''}`,
+    `${season.name} · ${L.toFixed(2)} × ${W.toFixed(2)} m${session.normalizeAlliance ? ' · normalized to blue' : ''}${zoom !== 1 ? ` · ${zoom.toFixed(1)}×` : ''}`,
     width - 6,
     height - 3,
   );

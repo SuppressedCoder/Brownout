@@ -13,6 +13,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { profileStore, updateProfile, newId, PART_LIMIT, type Layer } from '../state/profiles';
+import { undo, redo, undoStore } from '../lib/undo';
 import { settingsStore } from '../state/settings';
 import { uiStore, toast } from '../state/ui';
 import { useStore, createStore, type Store } from '../state/store';
@@ -198,6 +199,17 @@ export function RobotEditor({ profileId }: { profileId: string }) {
   const [picking, setPicking] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const view = useRef({ cx: 0, cy: 0, scale: 100 });
+  // The camera stays where the user puts it (wheel zooms, dragging empty space pans). It fits the
+  // robot once when the editor opens and when asked (Fit, double-click empty space), never by
+  // itself: refitting while a part was dragged outward zoomed out under the pointer, which pushed
+  // the part further out, which zoomed out more.
+  const cam = useRef<{ ox: number; oy: number; scale: number | null }>({ ox: 0, oy: 6, scale: null });
+  const camTick = useMemo(() => createStore({ n: 0 }), []);
+  const moveCam = (c: Partial<{ ox: number; oy: number; scale: number | null }>) => {
+    Object.assign(cam.current, c);
+    camTick.set((s) => ({ n: s.n + 1 }));
+  };
+  const fit = () => moveCam({ ox: 0, oy: 6, scale: null });
   const drag = useRef<{
     id: string;
     startX: number;
@@ -290,27 +302,35 @@ export function RobotEditor({ profileId }: { profileId: string }) {
       ctx.fillStyle = pal.fieldBg;
       ctx.fillRect(0, 0, width, height);
       if (!p) return;
-      // show the robot with room around it for parts that stick out
-      const span =
-        Math.max(p.robot.length, p.robot.width, ...p.layers.map((l) => 2 * Math.max(Math.abs(l.x) + l.length / 2, Math.abs(l.y) + l.width / 2))) * 1.25;
-      const scale = Math.max(20, Math.min(width, height - 24) / Math.max(span, 0.5));
-      const cx = width / 2;
-      const cy = height / 2 + 6;
+      // fit (when asked): the robot with room around it for parts that stick out
+      if (cam.current.scale === null) {
+        const span =
+          Math.max(p.robot.length, p.robot.width, ...p.layers.map((l) => 2 * Math.max(Math.abs(l.x) + l.length / 2, Math.abs(l.y) + l.width / 2))) * 1.25;
+        cam.current.scale = Math.max(2, Math.min(width, height - 24) / Math.max(span, 0.5));
+      }
+      const scale = cam.current.scale;
+      const cx = width / 2 + cam.current.ox;
+      const cy = height / 2 + cam.current.oy;
       view.current = { cx, cy, scale };
-      // 10 cm grid
-      ctx.strokeStyle = pal.fieldGrid;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      const step = 0.1 * scale;
-      for (let x = cx % step; x < width; x += step) {
-        ctx.moveTo(Math.round(x) + 0.5, 0);
-        ctx.lineTo(Math.round(x) + 0.5, height);
+      // where the robot is on screen, for the UI test
+      canvasRef.current?.setAttribute('data-view', `${cx.toFixed(1)} ${cy.toFixed(1)} ${scale.toFixed(3)}`);
+      // grid: 10 cm, or 1 m when zoomed far out
+      const gridM = 0.1 * scale >= 6 ? 0.1 : 1;
+      const step = gridM * scale;
+      if (step >= 6) {
+        ctx.strokeStyle = pal.fieldGrid;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let x = ((cx % step) + step) % step; x < width; x += step) {
+          ctx.moveTo(Math.round(x) + 0.5, 0);
+          ctx.lineTo(Math.round(x) + 0.5, height);
+        }
+        for (let y = ((cy % step) + step) % step; y < height; y += step) {
+          ctx.moveTo(0, Math.round(y) + 0.5);
+          ctx.lineTo(width, Math.round(y) + 0.5);
+        }
+        ctx.stroke();
       }
-      for (let y = cy % step; y < height; y += step) {
-        ctx.moveTo(0, Math.round(y) + 0.5);
-        ctx.lineTo(width, Math.round(y) + 0.5);
-      }
-      ctx.stroke();
       ctx.save();
       ctx.translate(cx, cy);
       // the robot's front points up on the screen
@@ -369,12 +389,12 @@ export function RobotEditor({ profileId }: { profileId: string }) {
       ctx.font = '11px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
-      ctx.fillText('Front', cx, 6);
+      ctx.fillText('Front', Math.min(width - 24, Math.max(24, cx)), 6);
       ctx.textAlign = 'left';
       ctx.textBaseline = 'bottom';
-      ctx.fillText('Grid: 10 cm', 8, height - 6);
+      ctx.fillText(step >= 6 ? `Grid: ${gridM === 1 ? '1 m' : '10 cm'}` : '', 8, height - 6);
     },
-    [profileStore, settingsStore, fieldAssetTicker, test],
+    [profileStore, settingsStore, fieldAssetTicker, test, camTick],
     [profileId, selected],
   );
 
@@ -384,7 +404,54 @@ export function RobotEditor({ profileId }: { profileId: string }) {
     const v = view.current;
     return { x: -(e.clientY - r.top - v.cy) / v.scale, y: -(e.clientX - r.left - v.cx) / v.scale };
   };
+  /** Drag the view: the middle button anywhere, the left button on empty space (a click there clears the selection). */
+  const panFrom = (e: React.MouseEvent, clickClears: boolean) => {
+    const start = { x: e.clientX, y: e.clientY, ox: cam.current.ox, oy: cam.current.oy };
+    let moved = false;
+    const onMove = (ev: MouseEvent) => {
+      if (!moved && Math.hypot(ev.clientX - start.x, ev.clientY - start.y) < 3) return;
+      moved = true;
+      if (canvasRef.current) canvasRef.current.style.cursor = 'grabbing';
+      moveCam({ ox: start.ox + ev.clientX - start.x, oy: start.oy + ev.clientY - start.y });
+    };
+    const onUp = () => {
+      if (canvasRef.current) canvasRef.current.style.cursor = '';
+      if (!moved && clickClears) setSelected(null);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+  // wheel zooms around the pointer, without limits that matter: Fit brings the robot back
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const c = cam.current;
+      if (c.scale === null) return;
+      const r = el.getBoundingClientRect();
+      const factor = Math.exp((e.deltaY > 0 ? -1 : 1) * 0.15 * Math.min(3, Math.abs(e.deltaY) / 50 + 0.5));
+      const next = Math.max(2, Math.min(20000, c.scale * factor));
+      // keep the point under the pointer where it is
+      const sx = e.clientX - r.left;
+      const sy = e.clientY - r.top;
+      const v = view.current;
+      const rx = -(sy - v.cy) / v.scale;
+      const ry = -(sx - v.cx) / v.scale;
+      moveCam({ scale: next, ox: sx + ry * next - r.width / 2, oy: sy + rx * next - r.height / 2 });
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [canvasRef.current]);
   const onDown = (e: React.MouseEvent) => {
+    if (e.button === 1) {
+      e.preventDefault();
+      panFrom(e, false);
+      return;
+    }
+    if (e.button !== 0) return;
     const p = toRobot(e);
     const preview = previewNow();
     const clamp = (v: number) => snap(Math.max(-PART_LIMIT, Math.min(PART_LIMIT, v)));
@@ -398,8 +465,11 @@ export function RobotEditor({ profileId }: { profileId: string }) {
     })();
     // else the last part drawn (on top) under the pointer
     const top = onPivot ? sel : [...layers].reverse().find((l) => hit(l, layers, p.x, p.y, preview));
-    setSelected(top?.id ?? null);
-    if (!top) return;
+    if (!top) {
+      panFrom(e, true);
+      return;
+    }
+    setSelected(top.id);
     const pivotFollows = Math.abs(top.pivot.x - top.x) < 1e-6 && Math.abs(top.pivot.y - top.y) < 1e-6;
     // the pivot, and a part turning about its own center, move in the directions of the parts they hang from;
     // a part turning about another point moves in its own turned directions
@@ -448,12 +518,23 @@ export function RobotEditor({ profileId }: { profileId: string }) {
   return (
     <div className="robot-editor" data-testid="robot-editor">
       <div className="robot-preview">
+        <div className="robot-preview-bar">
+          <span className="hint">Wheel zooms. Drag empty space to move the view.</span>
+          <span className="toolbar-spacer" />
+          <button className="btn" onClick={fit} title="Show the whole robot again (or double-click empty space)" data-testid="robot-fit">
+            Fit
+          </button>
+        </div>
         <div className="robot-canvas-host">
           <canvas
             ref={canvasRef}
             onMouseDown={onDown}
+            onDoubleClick={(e) => {
+              const p = toRobot(e);
+              if (!layers.some((l) => hit(l, layers, p.x, p.y, previewNow()))) fit();
+            }}
             data-testid="robot-preview"
-            title="Drag a part to move it. Drag the round marker to move a part's pivot (Alt-drag when the pivot is at the part's center)."
+            title="Drag a part to move it. Drag the round marker to move a part's pivot (Alt-drag when the pivot is at the part's center). Wheel zooms; drag empty space to move the view; double-click empty space to fit."
           />
         </div>
         {anyLinked && <TestAngle store={test} />}
@@ -719,6 +800,21 @@ function TestAngle({ store }: { store: Store<{ deg: number }> }) {
   );
 }
 
+/** Undo and redo, here too (Ctrl+Z and Ctrl+Shift+Z also work while the editor is open). */
+function UndoButtons() {
+  const { canUndo, canRedo } = useStore(undoStore, (s) => s);
+  return (
+    <>
+      <button className="btn" onClick={() => void undo()} disabled={!canUndo} title="Undo (Ctrl+Z)" data-testid="robot-undo">
+        <Icon name="undo" size={12} /> Undo
+      </button>
+      <button className="btn" onClick={() => void redo()} disabled={!canRedo} title="Redo (Ctrl+Shift+Z)" data-testid="robot-redo">
+        <Icon name="redo" size={12} /> Redo
+      </button>
+    </>
+  );
+}
+
 /** The editor as a dialog (opened from Settings → Robot and the 2D field's Display menu). */
 export function RobotEditorModal() {
   const profileId = useStore(uiStore, (s) => s.robotEditorFor);
@@ -740,6 +836,7 @@ export function RobotEditorModal() {
           <strong>Robot appearance</strong>
           <span className="modal-sub">Robot profile: {profile.name}</span>
           <span className="toolbar-spacer" />
+          <UndoButtons />
           <button className="btn primary" onClick={close} data-testid="robot-done">
             Done
           </button>

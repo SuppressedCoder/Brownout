@@ -25,6 +25,7 @@ import { sessionStore } from '../state/session';
 import { profileStore, type ProfilesState } from '../state/profiles';
 import { layoutSignature } from '../state/presets';
 import { toast } from '../state/ui';
+import { createStore } from '../state/store';
 import { sessionNow, applySessionShape, type SharedSession } from './windowSync';
 
 type ProfilesPart = Pick<ProfilesState, 'profiles' | 'assignments'>;
@@ -35,6 +36,15 @@ interface Step {
   session: SharedSession;
   sessionSig: string;
   profiles: ProfilesPart;
+}
+
+/** Whether there is anything to undo or redo, for buttons. */
+export const undoStore = createStore({ canUndo: false, canRedo: false });
+function publish(): void {
+  const canUndo = at > 0;
+  const canRedo = at >= 0 && at < steps.length - 1;
+  const s = undoStore.get();
+  if (s.canUndo !== canUndo || s.canRedo !== canRedo) undoStore.set({ canUndo, canRedo });
 }
 
 const MAX_STEPS = 100;
@@ -99,6 +109,7 @@ function keep(): void {
   steps.push(s);
   if (steps.length > MAX_STEPS) steps.shift();
   at = steps.length - 1;
+  publish();
 }
 
 /** What changed between two steps, for the toast. */
@@ -133,6 +144,7 @@ async function goTo(target: number): Promise<void> {
     // the undo key itself is not input for a new step
     usedAt = performance.now();
     applying = false;
+    publish();
   }
 }
 
