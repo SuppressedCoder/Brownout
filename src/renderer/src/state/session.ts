@@ -75,7 +75,7 @@ export interface SessionState {
   view: AppView;
 }
 
-export type AppView = 'panels' | 'video' | 'power';
+export type AppView = 'panels' | 'video' | 'power' | 'robot';
 
 /** The narrowest the sidebar can be dragged (px). */
 export const SIDEBAR_MIN = 220;

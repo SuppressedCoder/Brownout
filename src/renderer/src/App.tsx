@@ -23,6 +23,7 @@ import { CameraEditorModal } from './components/CameraEditor';
 import { RobotEditorModal } from './components/RobotEditor';
 import { VideoSyncModal } from './components/VideoSync';
 import { VideoReview, PowerView } from './components/Views';
+import { RobotSetup } from './components/RobotSetup';
 import { startVideoOffers } from './lib/videoOffer';
 import { addCustomField } from './lib/fieldAssets';
 import { startWindowSync, whenPrimary } from './lib/windowSync';
@@ -88,7 +89,8 @@ export function App() {
 
   // The window title names the view, so the Window menu and the taskbar tell windows apart
   useEffect(() => {
-    document.title = view === 'video' ? 'Brownout - Video review' : view === 'power' ? 'Brownout - Power' : 'Brownout';
+    document.title =
+      view === 'video' ? 'Brownout - Video review' : view === 'power' ? 'Brownout - Power' : view === 'robot' ? 'Brownout - Robot setup' : 'Brownout';
   }, [view]);
 
   // First log opened with an empty grid: apply Quick Look. Also report readiness (smoke test).
@@ -176,13 +178,15 @@ export function App() {
     <div className="app">
       <Header />
       <div className="body">
-        {sidebarOpen && view === 'panels' && <Sidebar />}
+        {/* the field list: for panels, and to drag fields onto the field in Robot setup */}
+        {sidebarOpen && (view === 'panels' || view === 'robot') && <Sidebar />}
         {/* the grid stays mounted (hidden) in the other views, so its layout is kept */}
         <div className="grid-wrap" style={view === 'panels' ? undefined : { display: 'none' }}>
           <Grid />
         </div>
         {view === 'video' && <VideoReview />}
         {view === 'power' && <PowerView />}
+        {view === 'robot' && <RobotSetup />}
       </div>
       <Timeline />
       {helpOpen && <Help />}

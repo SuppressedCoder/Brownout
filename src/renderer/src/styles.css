@@ -317,6 +317,112 @@ code {
 .power-view .standalone-panel {
   flex: 1;
 }
+/* Robot setup (components/RobotSetup.tsx): the field to drop on, the profile in tabs beside it */
+.robot-setup {
+  flex-direction: row;
+}
+.rs-field {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  border: 2px dashed transparent;
+  border-radius: 6px;
+}
+.rs-field .standalone-panel {
+  flex: 1;
+}
+.rs-field.drop-ready {
+  border-color: var(--accent);
+}
+.rs-drop-hint {
+  position: absolute;
+  left: 50%;
+  /* under the field's toolbar, clear of the legend (top left) and the camera readout (bottom) */
+  top: 40px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: var(--legend-bg);
+  color: var(--fg2);
+  font-size: 12px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.rs-field.drop-ready .rs-drop-hint {
+  color: var(--strong);
+}
+.rs-side {
+  flex: 0 0 400px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.setup-profile {
+  padding: 8px 10px 4px;
+  border-bottom: 1px solid var(--line);
+}
+.setup-profile .profile-bar {
+  margin-bottom: 4px;
+}
+.rs-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--line);
+}
+.rs-tab {
+  background: none;
+  border: none;
+  border-radius: 3px;
+  padding: 3px 8px;
+  color: var(--fg2);
+  font-size: 12px;
+  cursor: pointer;
+}
+.rs-tab:hover {
+  background: var(--hover-bg);
+}
+.rs-tab.active {
+  background: var(--active-bg);
+  color: var(--strong);
+}
+.rs-body {
+  flex: 1;
+  min-height: 0;
+  padding: 6px 10px 20px;
+}
+.on-field .dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 2px;
+}
+.drop-menu {
+  position: fixed;
+  max-width: 380px;
+}
+.drop-menu .drop-none {
+  padding: 4px 10px;
+  max-width: 340px;
+  white-space: normal;
+}
+@media (max-width: 1000px) {
+  .rs-side {
+    flex-basis: 320px;
+  }
+}
+
 /* a narrow window stacks the video above the field */
 @media (max-width: 900px) {
   .vr-main {
