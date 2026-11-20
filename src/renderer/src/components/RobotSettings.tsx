@@ -196,8 +196,24 @@ export function RobotSettings() {
           <span className="setting-help">Used to draw the robot on the 2D field and in the swerve view.</span>
         </span>
         <span className="size-inputs" key={profile.id}>
-          <NumberInput value={profile.robot.length} onCommit={(v) => size('length', v)} min={0.011} title="Length, front to back (m)" testId="robot-length" /> ×
-          <NumberInput value={profile.robot.width} onCommit={(v) => size('width', v)} min={0.011} title="Width, side to side (m)" testId="robot-width" /> m
+          <NumberInput
+            memory={`${profile.id}:robot.length`}
+            value={profile.robot.length}
+            onCommit={(v) => size('length', v)}
+            min={0.011}
+            title="Length, front to back (m)"
+            testId="robot-length"
+          />{' '}
+          ×
+          <NumberInput
+            memory={`${profile.id}:robot.width`}
+            value={profile.robot.width}
+            onCommit={(v) => size('width', v)}
+            min={0.011}
+            title="Width, side to side (m)"
+            testId="robot-width"
+          />{' '}
+          m
         </span>
       </div>
 
@@ -247,6 +263,7 @@ export function RobotSettings() {
         </span>
         <span className="size-inputs">
           <NumberInput
+            memory={`${profile.id}:swerve.maxSpeed`}
             value={profile.swerve.maxSpeed ?? null}
             allowEmpty
             placeholder="auto"

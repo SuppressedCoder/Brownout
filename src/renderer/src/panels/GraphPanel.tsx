@@ -293,10 +293,22 @@ function YAxisForm({ id, geomRef }: { id: string; geomRef: React.MutableRefObjec
           Auto
         </label>
         <label>
-          min <NumberInput disabled={!manual} value={manual ? manual[0] : Number(shown[0].toPrecision(4))} onCommit={(v) => edit(0, v)} />
+          min{' '}
+          <NumberInput
+            memory={`${id}:${key}.min`}
+            disabled={!manual}
+            value={manual ? manual[0] : Number(shown[0].toPrecision(4))}
+            onCommit={(v) => edit(0, v)}
+          />
         </label>
         <label>
-          max <NumberInput disabled={!manual} value={manual ? manual[1] : Number(shown[1].toPrecision(4))} onCommit={(v) => edit(1, v)} />
+          max{' '}
+          <NumberInput
+            memory={`${id}:${key}.max`}
+            disabled={!manual}
+            value={manual ? manual[1] : Number(shown[1].toPrecision(4))}
+            onCommit={(v) => edit(1, v)}
+          />
         </label>
       </div>
     );

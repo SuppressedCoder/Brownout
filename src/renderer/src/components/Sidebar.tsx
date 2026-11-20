@@ -184,6 +184,9 @@ export function Sidebar() {
     return out;
   }, [q, types, fields, showGenerated]);
 
+  // search results that share a folder: the folder once above them, each row only the part that differs
+  const groups = useMemo(() => (flat ? groupByFolder(flat) : null), [flat]);
+
   const onSearchKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Tab' && !e.shiftKey && completion) {
       // the word becomes a type filter; keep typing for the next one
@@ -251,13 +254,14 @@ export function Sidebar() {
     setFieldDrag(e, all.slice(0, MAX_DRAG).map(asDrag));
   };
 
-  const row = (f: MergedField, name: string, depth: number, keyPrefix = '') => {
+  const row = (f: MergedField, name: string, depth: number, keyPrefix = '', folder?: string) => {
     order.current.push(f.key);
     return (
       <FieldRow
         key={keyPrefix + f.key}
         f={f}
         name={name}
+        folder={folder}
         depth={depth}
         logs={logs}
         selected={selected.includes(f.key)}
@@ -369,7 +373,27 @@ export function Sidebar() {
             )}
           </div>
         )}
-        {flat ? flat.map((f) => row(f, f.key, 0)) : renderNode(tree, 0)}
+        {groups
+          ? groups.map((g) =>
+              g.fields.length > 1 ? (
+                <div className="search-group" key={`group:${g.folder}`} data-testid="search-group">
+                  <div
+                    className="search-folder"
+                    title={`${g.folder || '(top level)'}\nEvery field in this box is in this folder; each row shows the rest of its name.`}
+                  >
+                    <Icon name="folder" size={11} />
+                    <span className="path">
+                      <bdi>{g.folder || '(top level)'}</bdi>
+                    </span>
+                    <span className="count">{g.fields.length}</span>
+                  </div>
+                  {g.fields.map((f) => row(f, f.key.slice(g.folder.length), 0))}
+                </div>
+              ) : (
+                row(g.fields[0], g.fields[0].key.slice(g.folder.length), 0, '', g.folder)
+              ),
+            )
+          : renderNode(tree, 0)}
         {flat && flat.length === 0 && <div className="hint">No matches.</div>}
       </div>
       {selected.length > 1 && (
@@ -392,9 +416,24 @@ export function Sidebar() {
   );
 }
 
+/** Search results in groups by the folder they are in (the key up to its last '/'), in the order they came. */
+function groupByFolder(list: MergedField[]): { folder: string; fields: MergedField[] }[] {
+  const out = new Map<string, MergedField[]>();
+  for (const f of list) {
+    const folder = f.key.slice(0, f.key.lastIndexOf('/') + 1);
+    const g = out.get(folder);
+    if (g) g.push(f);
+    else out.set(folder, [f]);
+  }
+  // numbers in names in their natural order: 0, 1, 2 ... 10, not 0, 1, 10, 11
+  const natural = (a: MergedField, b: MergedField) => a.key.localeCompare(b.key, undefined, { numeric: true });
+  return [...out.entries()].map(([folder, fields]) => ({ folder, fields: fields.sort(natural) }));
+}
+
 function FieldRow({
   f,
   name,
+  folder,
   depth,
   logs,
   selected,
@@ -405,6 +444,8 @@ function FieldRow({
 }: {
   f: MergedField;
   name: string;
+  /** Shown dimmed before the name (a search result alone in its folder). */
+  folder?: string;
   depth: number;
   logs: { id: string; color: string; name: string }[];
   selected: boolean;
@@ -424,7 +465,16 @@ function FieldRow({
       onDoubleClick={addSelection}
       title={`${f.key}\n${f.type}${f.unit ? ` · ${f.unit}` : ''} · ${f.count} samples\nDrag onto a panel · double-click to add to the active panel\nCtrl-click and Shift-click select several`}
     >
-      <span className="name">{name}</span>
+      {folder ? (
+        <span className="name split">
+          <span className="key-folder">
+            <bdi>{folder}</bdi>
+          </span>
+          <span className="key-leaf">{name}</span>
+        </span>
+      ) : (
+        <span className="name">{name}</span>
+      )}
       {f.unit && <span className="unit">{f.unit}</span>}
       <span className="kind-badge">{f.structName ?? f.kind}</span>
       {logs.length > 1 && (
@@ -455,6 +505,14 @@ function FieldRow({
   );
 }
 
+/** Put text on the clipboard and say so. */
+function copyText(text: string, what: string): void {
+  void navigator.clipboard.writeText(text).then(
+    () => toast(`Copied ${what}: ${text.length > 60 ? `${text.slice(0, 60)}…` : text}`),
+    () => toast(`Could not copy ${what}.`, 'error'),
+  );
+}
+
 function Inspector() {
   const selected = useStore(sessionStore, (s) => s.selectedKeys);
   const logs = useStore(sessionStore, (s) => s.logs.filter((l) => l.visible));
@@ -468,8 +526,10 @@ function Inspector() {
         const f = fields.get(key);
         return (
           <div key={key} className="insp-field">
-            <div className="insp-key" title={key}>
-              {key}
+            <div className="insp-key" title={`${key}\nClick to copy the name`}>
+              <span className="copyable" onClick={() => copyText(key, 'the field name')} data-testid="insp-key">
+                {key}
+              </span>
               <button className="chip-btn" onClick={() => toggleSelectedKey(key)} title="Deselect">
                 <Icon name="close" size={10} />
               </button>
@@ -477,16 +537,25 @@ function Inspector() {
             {logs.map((l) => {
               const s = client.peekSeries(l.id, key);
               let text = '…';
+              /** The value in full, for copying (the shown text may be rounded). */
+              let raw: string | null = null;
               if (s === null) text = 'not in this log';
               else if (s && t !== null) {
                 const i = indexAtOrBefore(s.t, t - l.offset);
                 const v = i < 0 ? undefined : s.kind === 'boolean' ? !!s.v[i] : s.v[i];
                 text = v === undefined ? '— (before first sample)' : formatValue(v, f?.unit);
+                if (v !== undefined) raw = typeof v === 'string' ? v : typeof v === 'number' || typeof v === 'boolean' ? String(v) : JSON.stringify(v);
               } else if (s && t === null) text = 'set the cursor';
               return (
                 <div key={l.id} className="insp-val">
                   <span className="dot" style={{ background: l.color }} />
-                  <span className="mono">{text}</span>
+                  {raw !== null ? (
+                    <span className="mono copyable" title="Click to copy the value" onClick={() => copyText(raw!, 'the value')} data-testid="insp-value">
+                      {text}
+                    </span>
+                  ) : (
+                    <span className="mono">{text}</span>
+                  )}
                 </div>
               );
             })}

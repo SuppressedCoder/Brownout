@@ -130,8 +130,9 @@ export function CameraEditor({ profileId }: { profileId: string }) {
           >
             <span className="cam-slot-label">Mounted at</span>
             <span className="size-inputs" key={`${c.id}|${c.mount ? 1 : 0}`}>
-              <NumberInput value={c.mount?.x ?? null} placeholder="forward" onCommit={(v) => mount(c, 'x', v, patch)} /> ,
-              <NumberInput value={c.mount?.y ?? null} placeholder="left" onCommit={(v) => mount(c, 'y', v, patch)} /> m
+              <NumberInput memory={`${profileId}:${c.id}:mount.x`} value={c.mount?.x ?? null} placeholder="forward" onCommit={(v) => mount(c, 'x', v, patch)} />{' '}
+              ,
+              <NumberInput memory={`${profileId}:${c.id}:mount.y`} value={c.mount?.y ?? null} placeholder="left" onCommit={(v) => mount(c, 'y', v, patch)} /> m
             </span>
             {c.mount && (
               <button className="chip-btn" title="Draw from the robot center" onClick={() => patch(c.id, { mount: null })}>

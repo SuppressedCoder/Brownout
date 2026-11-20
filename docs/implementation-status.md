@@ -80,7 +80,7 @@ What the app in this repository does today, mapped to the specs. ✓ built · �
 | CSV export (selection or visible range) | ✓ | SVG export ✗ |
 | Browser build (`npm run web`) | ✓ | |
 | The guide inside the app: `docs/features.md` bundled with the build (`@docs` alias), read by `core/markdown.ts` into a tree drawn as React elements (no HTML from the file); Guide tab of the help sheet with contents and search; F1; panels missing data link to their section (`GuideLink`, `openGuide`) | ✓ | unit tests read the real file, so a guide edit the reader cannot handle fails `npm run check` |
-| UI test driving the real app (`npm run uitest`, 285 checks) | ✓ | passes on Linux (CI) and on Windows 11 |
+| UI test driving the real app (`npm run uitest`, 288 checks) | ✓ | passes on Linux (CI) and on Windows 11 |
 | Real-log check (`npm run reallog`): opens logs from `fixtures/local/`, sets up suggested subsystems, applies every preset, captures the camera view and the match report, writes a summary | ✓ | it checks nothing by itself; read `smoke/real-summary.json` and the screenshots |
 | Mechanism (side view), XY plot, 3D field | ✗ | |
 | Robot FTP download, DS folder watching, library | ✗ | P1 |

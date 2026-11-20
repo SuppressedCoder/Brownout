@@ -196,7 +196,7 @@ The timeline is the only thing that moves time: the cursor, the visible range an
 
 ## 6. The field list (sidebar)
 
-- **Search:** words narrow by name (every word must appear).
+- **Search:** words narrow by name (every word must appear). Results that sit in the same folder are boxed together under that folder, shown once, and each row shows only the rest of its name: the part that tells them apart. A result alone in its folder shows the folder dimmed in front of its name.
 - **Filter by type, by typing:** start typing a type that exists in your logs (`Pose2d`, `boolean`, `number`, `SwerveModuleState[]`, ...). The rest of it shows faintly with a **Tab** hint. Press **Tab** and it becomes a type chip, then keep typing:
   - more types (Tab again) list fields of **any** of them;
   - words narrow by name;
@@ -208,7 +208,7 @@ The timeline is the only thing that moves time: the cursor, the visible range an
 - **"Add as a timeline track"** button on a field row.
 - **`{}` button:** shows or hides the fields Brownout made itself (`/Brownout/...`) and the parts of structs and arrays.
 - **Badges** show each field's type and unit; colored dots show which open logs have it.
-- **Inspector** (bottom of the sidebar): the selected fields' values at the cursor, per log, with structs expanded.
+- **Inspector** (bottom of the sidebar): the selected fields' values at the cursor, per log, with structs expanded. **Click a value to copy it** (in full, not rounded); click a field's name to copy the name.
 - **Width:** drag the sidebar's right edge to make it wider (remembered); double-click the edge for the default width.
 
 ## 7. Panels and the grid (the Panels view)
@@ -550,7 +550,7 @@ A preset says where panels go; a **robot profile** describes the robot and appli
 | ? | Guide, shortcuts and tips |
 | F1 | Open the guide |
 
-**Number boxes take math.** Anywhere you type a number (part sizes and positions, robot size, camera mounts, graph limits, thresholds, offsets, full-scale speed), you can type a calculation instead: `0.09448 * 360`, `(27 + 3) / 39.37`, `2^12`, `sqrt(2) / 2`, `pi / 4`. It works out when you press Enter or leave the box, and the box then shows the result. It knows `+ - * / % ^`, parentheses, `pi`, and `sqrt abs sin cos tan asin acos atan round floor ceil min max hypot atan2` (angles in radians). Text that is not a number is marked red and changes nothing; Esc puts the old value back. Time boxes (the timeline's `t =` and zoom boxes, the sync view) keep their formats such as `1:30` and `500ms`, and take math in seconds too: `60 + 12.5`.
+**Number boxes take math.** Anywhere you type a number (part sizes and positions, robot size, camera mounts, graph limits, thresholds, offsets, full-scale speed), you can type a calculation instead: `0.09448 * 360`, `(27 + 3) / 39.37`, `2^12`, `sqrt(2) / 2`, `pi / 4`. It works out when you press Enter or leave the box, and the box then shows the result. It knows `+ - * / % ^`, parentheses, `pi`, and `sqrt abs sin cos tan asin acos atan round floor ceil min max hypot atan2` (angles in radians). Text that is not a number is marked red and changes nothing; Esc puts the old value back. **The box remembers the math:** while its value is still what the math gave, the number is underlined with dots and its tooltip shows the math; click into the box and the math is back, ready to edit. It is remembered per box (this part's position, this robot's length) across restarts. Time boxes (the timeline's `t =` and zoom boxes, the sync view) keep their formats such as `1:30` and `500ms`, and take math in seconds too: `60 + 12.5`.
 
 **In the video sync view only:** Space play/pause; Left/Right one frame; Shift+Left/Right one second; comma/period five seconds; `=` / `-` zoom the video timeline; Enter apply; Esc cancel.
 

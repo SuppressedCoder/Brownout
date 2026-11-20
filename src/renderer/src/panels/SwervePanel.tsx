@@ -131,6 +131,7 @@ export function SwervePanel({ id }: { id: string }) {
         <ToolGroup low className="hdr-label">
           Full scale
           <NumberInput
+            memory={`${profile.id}:swerve.maxSpeed`}
             style={{ width: 62 }}
             placeholder="auto"
             value={profile.swerve.maxSpeed ?? null}
