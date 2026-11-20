@@ -16,6 +16,8 @@
  * count and the less-used toolbar controls move into the overflow menu.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { NumberInput } from '../components/NumberInput';
+import { evalNumber } from '@core/mathExpr';
 import { panelStore, updatePanel, type GraphSettings } from '../state/panels';
 import { sessionStore, type LogEntry } from '../state/session';
 import { timeStore, setCursor, setHover, setView, zoomAround } from '../state/time';
@@ -101,12 +103,12 @@ export function GraphPanel({ id }: { id: string }) {
       title: 'Add a threshold line',
       label: 'Value on the left axis',
       initial: settings.thresholds.length ? '' : String(sessionStore.get().brownoutThreshold),
-      placeholder: 'e.g. 6.75',
+      placeholder: 'e.g. 6.75 (math works: 12 * 0.55)',
       confirmLabel: 'Add',
-      validate: (x) => (x.trim() !== '' && Number.isFinite(Number(x)) ? null : 'Enter a number'),
+      validate: (x) => (evalNumber(x) !== null ? null : 'Enter a number (or math, like 12 * 0.55)'),
     });
     if (v === null) return;
-    updatePanel<GraphSettings>(id, { thresholds: [...settings.thresholds, Number(v)] });
+    updatePanel<GraphSettings>(id, { thresholds: [...settings.thresholds, evalNumber(v)!] });
   };
 
   const compact = useCompact();
@@ -273,9 +275,8 @@ function YAxisForm({ id, geomRef }: { id: string; geomRef: React.MutableRefObjec
     const manual = settings[key] ?? null;
     const shown = manual ?? geomRef.current.lanes[0]?.[axis] ?? [0, 1];
     const set = (r: Range | null) => updatePanel<GraphSettings>(id, { [key]: r } as Partial<GraphSettings>);
-    const edit = (i: 0 | 1, text: string) => {
-      const n = Number(text);
-      if (text.trim() === '' || !Number.isFinite(n)) return;
+    const edit = (i: 0 | 1, n: number | null) => {
+      if (n === null) return;
       const r: Range = [shown[0], shown[1]];
       r[i] = n;
       if (r[1] > r[0]) set(r);
@@ -292,26 +293,10 @@ function YAxisForm({ id, geomRef }: { id: string; geomRef: React.MutableRefObjec
           Auto
         </label>
         <label>
-          min{' '}
-          <input
-            className="tool-input num"
-            type="number"
-            step="any"
-            disabled={!manual}
-            value={manual ? manual[0] : Number(shown[0].toPrecision(4))}
-            onChange={(e) => edit(0, e.target.value)}
-          />
+          min <NumberInput disabled={!manual} value={manual ? manual[0] : Number(shown[0].toPrecision(4))} onCommit={(v) => edit(0, v)} />
         </label>
         <label>
-          max{' '}
-          <input
-            className="tool-input num"
-            type="number"
-            step="any"
-            disabled={!manual}
-            value={manual ? manual[1] : Number(shown[1].toPrecision(4))}
-            onChange={(e) => edit(1, e.target.value)}
-          />
+          max <NumberInput disabled={!manual} value={manual ? manual[1] : Number(shown[1].toPrecision(4))} onCommit={(v) => edit(1, v)} />
         </label>
       </div>
     );

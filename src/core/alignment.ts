@@ -4,6 +4,8 @@
  * start) in every log, or wall-clock time relative to the primary log.
  * A manual nudge per log is added on top by the session.
  */
+import { evalNumber } from './mathExpr';
+
 export type AlignMode = 'raw' | 'logStart' | 'firstEnable' | 'autoStart' | 'teleopStart' | 'wallClock';
 
 export const ALIGN_MODES: { id: AlignMode; label: string; help: string }[] = [
@@ -65,7 +67,8 @@ export function formatDuration(t: number): string {
  */
 export function parseTimeInput(text: string): number | null {
   const m = text.trim().match(/^([+-])?\s*(?:(\d+):)?(\d+(?:\.\d*)?|\.\d+)\s*s?$/i);
-  if (!m) return null;
+  // not one of the time formats: math in seconds ("60 + 12.5")
+  if (!m) return evalNumber(text);
   const sign = m[1] === '-' ? -1 : 1;
   const minutes = m[2] !== undefined ? Number(m[2]) : 0;
   const seconds = Number(m[3]);
@@ -82,7 +85,11 @@ export function parseSpanInput(text: string): number | null {
     return v > 0 ? v : null;
   }
   m = t.match(/^(\d+(?:\.\d*)?|\.\d+)\s*(ms|s|sec|secs|m|min|mins)?$/);
-  if (!m) return null;
+  if (!m) {
+    // math in seconds ("2 * 60")
+    const v = evalNumber(t);
+    return v !== null && v > 0 ? v : null;
+  }
   const n = Number(m[1]);
   const unit = m[2] ?? 's';
   const v = unit === 'ms' ? n / 1000 : unit.startsWith('m') ? n * 60 : n;

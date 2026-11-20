@@ -4,6 +4,7 @@
  * signals are present or missing with how-to-log snippets.
  */
 import { useState } from 'react';
+import { NumberInput } from '../components/NumberInput';
 import { panelStore, type InfoSettings } from '../state/panels';
 import { sessionStore, setRoleOverride, setManualOffset, type LogEntry } from '../state/session';
 import { useStore } from '../state/store';
@@ -73,14 +74,14 @@ export function InfoPanel({ id }: { id: string }) {
               v={
                 <span>
                   {log.offset.toFixed(3)} s{' '}
-                  <input
+                  <NumberInput
                     className="tool-input"
                     style={{ width: 80 }}
-                    type="number"
-                    step="0.1"
                     value={log.manualOffset}
-                    onChange={(e) => setManualOffset(log.id, Number(e.target.value) || 0)}
+                    allowEmpty
+                    onCommit={(v) => setManualOffset(log.id, v ?? 0)}
                     title="Manual nudge (seconds), added to the alignment anchor"
+                    testId="manual-offset"
                   />{' '}
                   nudge
                 </span>

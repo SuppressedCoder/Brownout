@@ -10,6 +10,7 @@ import { analyzePower } from './analyzers/power';
 import { computeSubsystems, suggestSubsystems, batteryRating, UNASSIGNED } from './analyzers/subsystems';
 import { toCsv } from './csv';
 import { detectUnit } from './units';
+import { evalNumber } from './mathExpr';
 
 describe('WPILOG round trip', () => {
   it('writes and reads primitives', () => {
@@ -385,5 +386,37 @@ describe('power by subsystem', () => {
     expect(batteryRating(0.022)).toBe('fair');
     expect(batteryRating(0.03)).toBe('weak');
     expect(batteryRating(undefined)).toBe('unknown');
+  });
+});
+
+describe('math in number boxes', () => {
+  it('works out what was typed', () => {
+    expect(evalNumber('0.09448 * 360')).toBeCloseTo(34.0128, 10);
+    expect(evalNumber('12')).toBe(12);
+    expect(evalNumber(' -0.5 ')).toBe(-0.5);
+    expect(evalNumber('1e-3')).toBe(0.001);
+    expect(evalNumber('(27 + 3) / 39.37')).toBeCloseTo(0.762, 3);
+    expect(evalNumber('2 + 3 * 4')).toBe(14);
+    expect(evalNumber('2^3^2')).toBe(512);
+    expect(evalNumber('2 ** 10')).toBe(1024);
+    expect(evalNumber('-2^2')).toBe(-4);
+    expect(evalNumber('10 % 3')).toBe(1);
+    expect(evalNumber('6 × 7 ÷ 2')).toBe(21);
+    expect(evalNumber('sqrt(2) / 2')).toBeCloseTo(Math.SQRT1_2, 12);
+    expect(evalNumber('pi / 2')).toBeCloseTo(Math.PI / 2, 12);
+    expect(evalNumber('max(1, 4, 2)')).toBe(4);
+    expect(evalNumber('atan2(1, 1)')).toBeCloseTo(Math.PI / 4, 12);
+    expect(evalNumber('--3')).toBe(3);
+  });
+  it('says no to anything that is not a number', () => {
+    for (const bad of ['', 'abc', '1 +', '(2', '2)', '1/0', 'sqrt(-1)', '2 pi', 'alert(1)', 'x * 2', '1,2', 'Math.PI', '3 ; 4'])
+      expect(evalNumber(bad), bad).toBeNull();
+  });
+  it('time boxes keep their formats and take math in seconds too', () => {
+    expect(parseTimeInput('1:30')).toBe(90);
+    expect(parseTimeInput('60 + 12.5')).toBe(72.5);
+    expect(parseSpanInput('500ms')).toBe(0.5);
+    expect(parseSpanInput('2 * 60')).toBe(120);
+    expect(parseSpanInput('1 - 2')).toBeNull();
   });
 });

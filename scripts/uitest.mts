@@ -1195,13 +1195,30 @@ async function main() {
   await page.locator('[data-testid=edit-robot]').click();
   await page.waitForSelector('[data-testid=robot-editor]');
   await page.locator('[data-testid=add-rect]').click();
-  await page.locator('[data-testid=layer-x]').fill('0.3');
+  // number boxes take math: the result is used and shown
+  await page.locator('[data-testid=layer-x]').fill('0.6 / 2');
   await page.locator('[data-testid=layer-x]').press('Enter');
   const layers1 = await state<{ kind: string; x: number; link: unknown }[]>(page, 's.profileStore.get().profiles[0].layers');
   check(
-    'a rectangle can be added and placed by typing',
-    layers1.length === 1 && layers1[0].kind === 'rect' && layers1[0].x === 0.3 && layers1[0].link === null,
+    'a rectangle can be added and placed by typing math (0.6 / 2)',
+    layers1.length === 1 &&
+      layers1[0].kind === 'rect' &&
+      layers1[0].x === 0.3 &&
+      layers1[0].link === null &&
+      (await page.locator('[data-testid=layer-x]').inputValue()) === '0.3',
     JSON.stringify(layers1),
+  );
+  // text that is not a number is marked and changes nothing; Esc puts the value back without closing the editor
+  await page.locator('[data-testid=layer-x]').fill('0.3 +');
+  await page.locator('[data-testid=layer-x]').press('Enter');
+  const marked = (await page.locator('[data-testid=layer-x]').getAttribute('class'))!.includes('bad');
+  await page.locator('[data-testid=layer-x]').press('Escape');
+  check(
+    'a number box marks text that is not a number, and Esc puts the value back',
+    marked &&
+      (await page.locator('[data-testid=layer-x]').inputValue()) === '0.3' &&
+      (await state<number>(page, 's.profileStore.get().profiles[0].layers[0].x')) === 0.3 &&
+      (await page.locator('[data-testid=robot-editor]').count()) === 1,
   );
   await page.locator('[data-testid=layer-link]').click();
   await page.locator('.modal-head input').last().fill('TurretPosition');
@@ -1363,7 +1380,7 @@ async function main() {
   await page.locator('[data-testid=robot-done]').click();
   // the robot's size is not capped
   {
-    const len = page.locator('input[title="Length, front to back (m)"]');
+    const len = page.locator('[data-testid=robot-length]');
     await len.fill('3.6');
     await len.blur();
     await page.waitForTimeout(150);

@@ -5,6 +5,7 @@
  * corrections and favorites, with export / import as one file.
  */
 import { useState } from 'react';
+import { NumberInput } from './NumberInput';
 import {
   profileStore,
   profileById,
@@ -113,9 +114,8 @@ export function RobotSettings() {
     removeProfile(profile.id);
     setViewId(next.id);
   };
-  const size = (key: 'length' | 'width', text: string) => {
-    const v = Number(text);
-    if (Number.isFinite(v) && v > 0.01) updateProfile(profile.id, { robot: { ...profile.robot, [key]: v } });
+  const size = (key: 'length' | 'width', v: number | null) => {
+    if (v !== null && v > 0.01) updateProfile(profile.id, { robot: { ...profile.robot, [key]: v } });
   };
 
   return (
@@ -196,20 +196,8 @@ export function RobotSettings() {
           <span className="setting-help">Used to draw the robot on the 2D field and in the swerve view.</span>
         </span>
         <span className="size-inputs" key={profile.id}>
-          <input
-            className="tool-input num"
-            defaultValue={profile.robot.length}
-            onBlur={(e) => size('length', e.target.value)}
-            title="Length, front to back (m)"
-          />{' '}
-          ×
-          <input
-            className="tool-input num"
-            defaultValue={profile.robot.width}
-            onBlur={(e) => size('width', e.target.value)}
-            title="Width, side to side (m)"
-          />{' '}
-          m
+          <NumberInput value={profile.robot.length} onCommit={(v) => size('length', v)} min={0.011} title="Length, front to back (m)" testId="robot-length" /> ×
+          <NumberInput value={profile.robot.width} onCommit={(v) => size('width', v)} min={0.011} title="Width, side to side (m)" testId="robot-width" /> m
         </span>
       </div>
 
@@ -257,15 +245,12 @@ export function RobotSettings() {
           <span className="setting-label">Full-scale speed</span>
           <span className="setting-help">The speed that draws a full-length arrow. Leave empty to use the fastest speed in each log.</span>
         </span>
-        <span className="size-inputs" key={`${profile.id}|${profile.swerve.maxSpeed ?? ''}`}>
-          <input
-            className="tool-input num"
+        <span className="size-inputs">
+          <NumberInput
+            value={profile.swerve.maxSpeed ?? null}
+            allowEmpty
             placeholder="auto"
-            defaultValue={profile.swerve.maxSpeed ?? ''}
-            onBlur={(e) => {
-              const v = Number(e.target.value);
-              updateProfile(profile.id, { swerve: { ...profile.swerve, maxSpeed: e.target.value.trim() !== '' && Number.isFinite(v) && v > 0 ? v : null } });
-            }}
+            onCommit={(v) => updateProfile(profile.id, { swerve: { ...profile.swerve, maxSpeed: v !== null && v > 0 ? v : null } })}
           />{' '}
           m/s
         </span>
