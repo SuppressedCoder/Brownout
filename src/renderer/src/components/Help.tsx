@@ -34,7 +34,7 @@ export function Help() {
     ['Graph: wheel or drag on an axis', 'Zoom / pan just that axis'],
     ['Graph: double-click', 'Back to auto-fit'],
     ['Graph: Shift+drag', 'Select a time range'],
-    ['2D field: wheel / drag / double-click', 'Zoom / pan / fit'],
+    ['2D field: wheel / drag / double-click', 'Zoom / pan / fit (free: zoom out and pan past the field)'],
     ['2D field: Display', 'Field picture, camera lines to AprilTags, tags-seen tracks; hide robot names, all parts or single parts'],
     [
       'Video: Sync, Open the sync view',
@@ -49,6 +49,7 @@ export function Help() {
     ['Field tree: drag its right edge', 'Make the sidebar wider (double-click: default width)'],
     ['Panel tab: double-click', 'Fill the grid with that panel; again to put it back'],
     ['Robot editor: drag the round pivot marker', 'Move where a part turns (Alt-drag when it sits at the part’s center)'],
+    ['Robot editor: wheel / drag empty space / double-click empty space', 'Zoom / move the view / fit the robot'],
     ['Header: click a log name / its dot', 'Make it the primary log / hide or show it'],
   ];
   return (

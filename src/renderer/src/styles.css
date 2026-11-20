@@ -2541,6 +2541,13 @@ h4 {
   border-right: 1px solid var(--line);
 }
 /* the canvas gets a box of its own: the canvas sizes itself to its parent, and the test angle sits below it */
+.robot-preview-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--line);
+}
 .robot-canvas-host {
   flex: 1;
   min-height: 0;

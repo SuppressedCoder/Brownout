@@ -28,6 +28,9 @@ import { addCustomField } from './lib/fieldAssets';
 import { startWindowSync, whenPrimary } from './lib/windowSync';
 import { startUndo } from './lib/undo';
 
+/** Inputs that are not typed into (sliders, checkboxes, ...): undo and redo still work while they have focus. */
+const NOT_TYPED = new Set(['range', 'checkbox', 'radio', 'color', 'button', 'submit', 'reset', 'file']);
+
 /** Below this window width the sidebar hides itself. */
 const NARROW = 980;
 
@@ -113,11 +116,17 @@ export function App() {
         uiStore.set({ helpOpen: false });
         return;
       }
-      if (ui.settingsOpen) return; // the settings modal handles its own keys
       const el = e.target as HTMLElement;
-      if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable) return;
+      // typing into a text box: its keys are its own (Ctrl+Z there undoes the typing)
+      const typing = el.isContentEditable || el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !NOT_TYPED.has((el as HTMLInputElement).type));
+      if (typing) return;
       const a = actionForCombo(combo);
       if (!a) return;
+      const undoRedo = a.id === 'undo' || a.id === 'redo';
+      // a slider, checkbox or dropdown keeps its keys, but has no undo of its own: undo and redo still work
+      if ((el.tagName === 'INPUT' || el.tagName === 'SELECT') && !undoRedo) return;
+      // the settings modal handles its own keys; undo and redo also work there (and in the robot editor opened from it)
+      if (ui.settingsOpen && !undoRedo) return;
       e.preventDefault();
       a.run();
     };
