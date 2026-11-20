@@ -6,6 +6,7 @@
  * it finds from field names in each log.
  */
 import { useEffect, useMemo, useState } from 'react';
+import { NumberInput } from './NumberInput';
 import { profileStore, updateProfile, newId, CAMERA_COLORS, type Camera } from '../state/profiles';
 import { sessionStore } from '../state/session';
 import { uiStore, toast } from '../state/ui';
@@ -129,8 +130,8 @@ export function CameraEditor({ profileId }: { profileId: string }) {
           >
             <span className="cam-slot-label">Mounted at</span>
             <span className="size-inputs" key={`${c.id}|${c.mount ? 1 : 0}`}>
-              <input className="tool-input num" placeholder="forward" defaultValue={c.mount?.x ?? ''} onBlur={(e) => mount(c, 'x', e.target.value, patch)} /> ,
-              <input className="tool-input num" placeholder="left" defaultValue={c.mount?.y ?? ''} onBlur={(e) => mount(c, 'y', e.target.value, patch)} /> m
+              <NumberInput value={c.mount?.x ?? null} placeholder="forward" onCommit={(v) => mount(c, 'x', v, patch)} /> ,
+              <NumberInput value={c.mount?.y ?? null} placeholder="left" onCommit={(v) => mount(c, 'y', v, patch)} /> m
             </span>
             {c.mount && (
               <button className="chip-btn" title="Draw from the robot center" onClick={() => patch(c.id, { mount: null })}>
@@ -155,9 +156,8 @@ export function CameraEditor({ profileId }: { profileId: string }) {
   );
 }
 
-function mount(c: Camera, axis: 'x' | 'y', text: string, patch: (id: string, c: Partial<Camera>) => void) {
-  const v = Number(text);
-  if (text.trim() === '' || !Number.isFinite(v)) return;
+function mount(c: Camera, axis: 'x' | 'y', v: number | null, patch: (id: string, c: Partial<Camera>) => void) {
+  if (v === null) return;
   patch(c.id, { mount: { x: c.mount?.x ?? 0, y: c.mount?.y ?? 0, [axis]: Math.max(-2, Math.min(2, v)) } });
 }
 

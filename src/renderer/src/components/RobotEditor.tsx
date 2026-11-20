@@ -14,6 +14,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { profileStore, updateProfile, newId, PART_LIMIT, type Layer } from '../state/profiles';
 import { undo, redo, undoStore } from '../lib/undo';
+import { NumberInput } from './NumberInput';
 import { settingsStore } from '../state/settings';
 import { uiStore, toast } from '../state/ui';
 import { useStore, createStore, type Store } from '../state/store';
@@ -170,24 +171,8 @@ function Num({
   title?: string;
   testId?: string;
 }) {
-  const [text, setText] = useState(fmt(value));
-  useEffect(() => setText(fmt(value)), [value]);
-  const commit = () => {
-    const v = Number(text);
-    if (text.trim() === '' || !Number.isFinite(v)) setText(fmt(value));
-    else onChange(Math.max(min, Math.min(max, v)));
-  };
-  return (
-    <input
-      className="tool-input num"
-      value={text}
-      title={title}
-      data-testid={testId}
-      onChange={(e) => setText(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-    />
-  );
+  // takes math too ("0.09448 * 360")
+  return <NumberInput value={value} onCommit={(v) => v !== null && onChange(v)} min={min} max={max} format={fmt} title={title} testId={testId} />;
 }
 
 export function RobotEditor({ profileId }: { profileId: string }) {

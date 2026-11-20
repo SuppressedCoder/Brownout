@@ -41,6 +41,7 @@ export function Help() {
       'Pair a video frame with a log moment (wheel zooms the video to single frames); pair a second, late moment if the video drifts',
     ],
     ['Commands: click a run', 'Jump to where that command started'],
+    ['Any number box', 'Type math instead of a number: 0.09448 * 360, (27 + 3) / 39.37, sqrt(2) / 2'],
     ['Commands: click a name', "Go to that command's next run (Shift+click: the one before)"],
     ['Any panel: hover its top-right corner', 'Copy the panel as an image'],
     ['Field tree: drag a field', 'Onto a panel to add it; onto an empty grid to create the best panel'],

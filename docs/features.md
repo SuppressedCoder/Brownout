@@ -550,6 +550,8 @@ A preset says where panels go; a **robot profile** describes the robot and appli
 | ? | Guide, shortcuts and tips |
 | F1 | Open the guide |
 
+**Number boxes take math.** Anywhere you type a number (part sizes and positions, robot size, camera mounts, graph limits, thresholds, offsets, full-scale speed), you can type a calculation instead: `0.09448 * 360`, `(27 + 3) / 39.37`, `2^12`, `sqrt(2) / 2`, `pi / 4`. It works out when you press Enter or leave the box, and the box then shows the result. It knows `+ - * / % ^`, parentheses, `pi`, and `sqrt abs sin cos tan asin acos atan round floor ceil min max hypot atan2` (angles in radians). Text that is not a number is marked red and changes nothing; Esc puts the old value back. Time boxes (the timeline's `t =` and zoom boxes, the sync view) keep their formats such as `1:30` and `500ms`, and take math in seconds too: `60 + 12.5`.
+
 **In the video sync view only:** Space play/pause; Left/Right one frame; Shift+Left/Right one second; comma/period five seconds; `=` / `-` zoom the video timeline; Enter apply; Esc cancel.
 
 **In the field search only:** Tab turns the faint type into a filter; Backspace on an empty search removes the last type; Esc clears.

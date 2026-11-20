@@ -8,6 +8,7 @@
  * saved in the robot profile.
  */
 import { useCallback } from 'react';
+import { NumberInput } from '../components/NumberInput';
 import { panelStore, updatePanel, type SwerveSettings } from '../state/panels';
 import { sessionStore, activeProfileId, type LogEntry } from '../state/session';
 import { profileStore, profileById, updateProfile, SWERVE_ORDERS, type SwerveOrder } from '../state/profiles';
@@ -129,18 +130,13 @@ export function SwervePanel({ id }: { id: string }) {
         </ToolGroup>
         <ToolGroup low className="hdr-label">
           Full scale
-          <input
-            className="tool-input num"
+          <NumberInput
             style={{ width: 62 }}
             placeholder="auto"
-            defaultValue={profile.swerve.maxSpeed ?? ''}
-            key={`${profile.id}|${profile.swerve.maxSpeed ?? ''}`}
+            value={profile.swerve.maxSpeed ?? null}
+            allowEmpty
             title="Speed in m/s that draws a full-length arrow. Empty: the fastest speed in the log. Saved in the robot profile."
-            onBlur={(e) => {
-              const v = Number(e.target.value);
-              updateProfile(profile.id, { swerve: { ...profile.swerve, maxSpeed: e.target.value.trim() !== '' && Number.isFinite(v) && v > 0 ? v : null } });
-            }}
-            onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+            onCommit={(v) => updateProfile(profile.id, { swerve: { ...profile.swerve, maxSpeed: v !== null && v > 0 ? v : null } })}
           />
           m/s
         </ToolGroup>
