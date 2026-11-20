@@ -120,6 +120,7 @@ From left to right:
 
 - **Sidebar button** (Ctrl+B): shows or hides the field list.
 - **File menu:** open logs, export CSV, copy panel as image, match report (PDF), close all logs.
+- **The menu bar** (File, Edit, View, Panels, Robot, Window, Help) is hidden on Windows and Linux: press **Alt** to show it. Everything in it is also in the app, except Reload, Developer Tools, the app's own zoom and full screen (View menu) and the list of open windows (Window menu). Alt-drag gestures do not open it.
 - **Undo and redo** (Ctrl+Z, Ctrl+Shift+Z, or the Edit menu): take back what you changed: panels added, removed, moved or set up, timeline tracks, logs opened or closed (a closed log opens again from its file), offsets, colors, hidden logs, the alignment mode, bookmarks and robot profiles. Moving around in time (cursor, zoom, playback) is not undone. Each step is one change you made; a toast says what was undone. In a text box, Ctrl+Z undoes your typing instead.
 - **Log chips**, one per open log, in its color:
   - **click the colored dot** to hide or show that log everywhere;
@@ -402,10 +403,10 @@ Any panel that lacks what it needs says so and how to log it, and Log info & hea
 
 Preset and Add panel only show in the Panels view. The views' own panels are never saved into your layouts or presets.
 
-**Several windows** (Ctrl+Shift+N, the Window menu, or just start Brownout again): another window on the same logs and the same time, for a second monitor. Put Video review in one and your graphs in the other.
+**Several windows** (Ctrl+Shift+N, the Window menu (press Alt), or just start Brownout again): another window on the same logs and the same time, for a second monitor. Put Video review in one and your graphs in the other.
 
 - **Shared by all windows:** the open logs, their order, colors, offsets and hidden/shown state, the alignment mode, match or whole log, bookmarks, and time: the cursor, the zoom, the selection and playback. Open, close or line up a log in any window and the others do the same; press Play or Pause in any window.
-- **Each window's own:** its view (Panels, Video review, Power), its panels and layout, the sidebar and the timeline height. The window title names its view, and the **Window** menu lists the windows to switch between.
+- **Each window's own:** its view (Panels, Video review, Power), its panels and layout, the sidebar and the timeline height. The window title names its view, and the **Window** menu (press Alt) lists the windows to switch between.
 - Playback keeps time even when the window you pressed Play in is minimized.
 - Only the first window saves the layout and the session. A later window starts from the saved layout, and what you change in it lasts until you close it. When the first window closes, the next one takes over saving.
 - Settings, presets, robot profiles and video syncs changed in one window reach the others.
