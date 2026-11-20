@@ -2,15 +2,25 @@
  * Commands: one row per command, with a bar whenever it ran. Reads the
  * command scheduler's list of running commands (normally
  * NT:/SmartDashboard/Scheduler/Names), or one true/false field per command
- * (see core/commands.ts). Rows that are running at the cursor are lit, and
- * clicking a bar jumps to where that run starts. With several logs each row
- * has one lane per log.
+ * (see core/commands.ts). With several logs each row has one lane per log.
+ *
+ * What runs at the cursor is meant to be seen at a glance: its row is tinted
+ * in the log's color with a bar at its left edge, its name is bold, and the
+ * time column says how long the current run has been going. A command that
+ * just started flashes its row (fading over FLASH seconds of log time), so
+ * during playback the one that went off stands out. Runs not at the cursor
+ * are dimmed.
+ *
+ * Interaction: hovering a row highlights it and outlines the run under the
+ * mouse; clicking a run jumps to its start; clicking a name jumps to that
+ * command's next run (Shift: the previous one). A filter finds commands by name.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { panelStore, updatePanel, type CommandsSettings } from '../state/panels';
 import { sessionStore, type LogEntry } from '../state/session';
-import { timeStore, setCursor } from '../state/time';
-import { useStore } from '../state/store';
+import { timeStore, setCursor, gotoTime } from '../state/time';
+import { useStore, createStore, type Store } from '../state/store';
+import { toast } from '../state/ui';
 import { client } from '../worker/client';
 import { useCanvas, type DrawContext } from '../lib/useCanvas';
 import { useSeriesTick } from '../lib/useSeries';
@@ -20,7 +30,7 @@ import { formatTime } from '@core/alignment';
 import { T } from '../lib/theme';
 import { withAlpha } from '../lib/colors';
 import { drawCursor, drawTimeAxis, fitText } from '../lib/draw';
-import { Toolbar, ToolButton, ToolSelect, ToolGroup } from '../components/Toolbar';
+import { Toolbar, ToolButton, ToolSelect, ToolGroup, ToolInput } from '../components/Toolbar';
 import { FieldPicker } from '../components/FieldPicker';
 import { GuideLink } from '../components/Guide';
 import { Icon } from '../components/Icon';
@@ -29,7 +39,15 @@ import { shortKey } from '../lib/fields';
 /** Width of the command-name column: wider panels give long command names more room. */
 const labelW = (width: number) => Math.round(Math.min(340, Math.max(220, width * 0.42)));
 const AXIS_H = 20;
-const LANE = 9;
+const LANE = 10;
+/** How long (log seconds) a command's row flashes after it starts. */
+const FLASH = 0.75;
+
+/** The row and run under the mouse (run: `${logId}:${index}`). */
+interface Hover {
+  row: number;
+  run: string | null;
+}
 
 const sourceCache = new WeakMap<FieldInfo[], CommandSource[]>();
 function sourceFor(log: LogEntry, override: string | undefined): CommandSource | null {
@@ -77,6 +95,17 @@ interface Layout {
   headH: number;
 }
 
+/** Every word of the filter appears in the name. */
+function matches(name: string, filter: string | undefined): boolean {
+  if (!filter) return true;
+  const n = name.toLowerCase();
+  return filter
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((w) => n.includes(w));
+}
+
 function layout(settings: CommandsSettings): Layout {
   const session = sessionStore.get();
   let logs = session.logs.filter((l) => l.visible);
@@ -88,6 +117,7 @@ function layout(settings: CommandsSettings): Layout {
     if (!rows) continue;
     const m = new Map<string, CommandRow>();
     for (const r of rows) {
+      if (!matches(r.name, settings.filter)) continue;
       m.set(r.name, r);
       const at = r.runs[0].start + log.offset;
       if (!first.has(r.name) || at < first.get(r.name)!) first.set(r.name, at);
@@ -95,7 +125,29 @@ function layout(settings: CommandsSettings): Layout {
     byLog.set(log.id, m);
   }
   const names = [...first.keys()].sort((a, b) => first.get(a)! - first.get(b)! || a.localeCompare(b));
-  return { logs, names, byLog, rowH: Math.max(20, logs.length * LANE + 8), headH: logs.length * 16 + 8 };
+  // a legend tells the lanes apart when there are several logs; one log needs none
+  return { logs, names, byLog, rowH: Math.max(24, logs.length * LANE + 10), headH: logs.length > 1 ? 22 : 2 };
+}
+
+/** "2.4 s", "38 s", "1:05". */
+function duration(s: number): string {
+  if (s < 10) return `${s.toFixed(1)} s`;
+  if (s < 60) return `${Math.floor(s)} s`;
+  return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+}
+
+/** The start of this command's next run after the cursor (or the previous one before it), over the logs shown. */
+function nextRunStart(lay: Layout, name: string, dir: 1 | -1): number | null {
+  const cur = timeStore.get().cursor;
+  let best: number | null = null;
+  for (const log of lay.logs) {
+    for (const u of lay.byLog.get(log.id)?.get(name)?.runs ?? []) {
+      const a = u.start + log.offset;
+      const ok = cur === null ? dir === 1 : dir === 1 ? a > cur + 1e-6 : a < cur - 1e-6;
+      if (ok && (best === null || (dir === 1 ? a < best : a > best))) best = a;
+    }
+  }
+  return best;
 }
 
 export function CommandsPanel({ id }: { id: string }) {
@@ -103,15 +155,16 @@ export function CommandsPanel({ id }: { id: string }) {
   const logs = useStore(sessionStore, (s) => s.logs.filter((l) => l.visible));
   useSeriesTick();
   const [picker, setPicker] = useState(false);
-  const draw = useCallback((dc: DrawContext) => drawCommands(dc, id), [id]);
-  const ref = useCanvas(draw, [timeStore, sessionStore, panelStore], [id]);
+  const hover = useMemo(() => createStore<Hover>({ row: -1, run: null }), []);
+  const draw = useCallback((dc: DrawContext) => drawCommands(dc, id, hover), [id, hover]);
+  const ref = useCanvas(draw, [timeStore, sessionStore, panelStore, hover], [id]);
   const L = layout(settings);
   const height = L.headH + L.names.length * L.rowH + AXIS_H;
   const anySource = logs.some((l) => sourceFor(l, settings.sourceKey));
   const autoSource = logs.map((l) => sourceFor(l, undefined)).find(Boolean);
   const hostRef = useRef<HTMLDivElement>(null);
 
-  // hit testing: tooltip on hover, jump on click
+  // hit testing: highlight and tooltip on hover; a run jumps to its start, a name to the next run
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -122,39 +175,64 @@ export function CommandsPanel({ id }: { id: string }) {
       const r = el.getBoundingClientRect();
       const x = e.clientX - r.left;
       const y = e.clientY - r.top - lay.headH;
-      if (x < labelW(r.width) || y < 0) return null;
+      if (y < 0) return null;
       const row = Math.floor(y / lay.rowH);
       const name = lay.names[row];
       if (!name) return null;
-      const lane = Math.floor((y - row * lay.rowH - 4) / LANE);
-      const log = lay.logs[Math.max(0, Math.min(lay.logs.length - 1, lane))];
+      const LW = labelW(r.width);
+      if (x < LW) return { lay, row, name, label: true as const };
+      const lane = Math.floor((y - row * lay.rowH - 5) / LANE);
+      const li = Math.max(0, Math.min(lay.logs.length - 1, lane));
+      const log = lay.logs[li];
       const [t0, t1] = timeStore.get().view;
-      const t = t0 + ((x - labelW(r.width)) / (r.width - labelW(r.width) - 8)) * (t1 - t0);
-      const run = lay.byLog
-        .get(log.id)
-        ?.get(name)
-        ?.runs.find((u) => t >= u.start + log.offset && t <= u.end + log.offset);
-      return run ? { name, log, run } : null;
+      const t = t0 + ((x - LW) / (r.width - LW - 8)) * (t1 - t0);
+      // a run narrower than a few pixels is still easy to hit
+      const slop = (4 / Math.max(1, r.width - LW - 8)) * (t1 - t0);
+      const runs = lay.byLog.get(log.id)?.get(name)?.runs ?? [];
+      const ri = runs.findIndex((u) => t >= u.start + log.offset - slop && t <= u.end + log.offset + slop);
+      return { lay, row, name, label: false as const, log, run: ri >= 0 ? runs[ri] : undefined, runKey: ri >= 0 ? `${log.id}:${ri}` : null };
     };
     const onMove = (e: MouseEvent) => {
       const h = hit(e);
-      el.style.cursor = h ? 'pointer' : 'default';
-      el.title = h
-        ? `${h.name} · ${h.log.name}\n${formatTime(h.run.start + h.log.offset)} to ${formatTime(h.run.end + h.log.offset)} (${(h.run.end - h.run.start).toFixed(2)} s${h.run.open ? ', still running when the log ended' : ''})\nClick to jump to its start`
-        : '';
+      const next: Hover = { row: h ? h.row : -1, run: h && !h.label ? h.runKey : null };
+      const prev = hover.get();
+      if (prev.row !== next.row || prev.run !== next.run) hover.set(next);
+      if (!h) {
+        el.style.cursor = 'default';
+        el.title = '';
+      } else if (h.label) {
+        el.style.cursor = 'pointer';
+        el.title = `${h.name}\nClick: go to its next run. Shift+click: the previous one.`;
+      } else if (h.run) {
+        el.style.cursor = 'pointer';
+        el.title = `${h.name} · ${h.log.name}\n${formatTime(h.run.start + h.log.offset)} to ${formatTime(h.run.end + h.log.offset)} (${(h.run.end - h.run.start).toFixed(2)} s${h.run.open ? ', still running when the log ended' : ''})\nClick to jump to its start`;
+      } else {
+        el.style.cursor = 'default';
+        el.title = '';
+      }
     };
+    const onLeave = () => hover.set({ row: -1, run: null });
     const onClick = (e: MouseEvent) => {
       const h = hit(e);
-      if (h) setCursor(h.run.start + h.log.offset);
+      if (!h) return;
+      if (!h.label) {
+        if (h.run) setCursor(h.run.start + h.log.offset);
+        return;
+      }
+      const t = nextRunStart(h.lay, h.name, e.shiftKey ? -1 : 1);
+      if (t === null) toast(e.shiftKey ? `${h.name} has no run before the cursor.` : `${h.name} has no run after the cursor.`);
+      else gotoTime(t);
     };
     el.addEventListener('mousemove', onMove);
+    el.addEventListener('mouseleave', onLeave);
     el.addEventListener('click', onClick);
     return () => {
       el.removeEventListener('mousemove', onMove);
+      el.removeEventListener('mouseleave', onLeave);
       el.removeEventListener('click', onClick);
     };
     // again when the canvas appears: it is not there while the panel shows a message instead
-  }, [ref.current, id]);
+  }, [ref.current, id, hover]);
 
   return (
     <div className="panel commands-panel">
@@ -182,6 +260,14 @@ export function CommandsPanel({ id }: { id: string }) {
             </ToolGroup>
           )
         )}
+        <ToolInput
+          low
+          value={settings.filter ?? ''}
+          onChange={(v) => updatePanel<CommandsSettings>(id, { filter: v || undefined })}
+          placeholder="Filter commands"
+          title="Show only commands whose names contain these words"
+          width={140}
+        />
         <ToolSelect
           low
           value={settings.source}
@@ -209,6 +295,7 @@ export function CommandsPanel({ id }: { id: string }) {
         </div>
       ) : (
         <div className="scroll commands-body">
+          {settings.filter && L.names.length === 0 && <div className="hint commands-none">No command matches “{settings.filter}”.</div>}
           <div className="canvas-host" ref={hostRef} style={{ height, flex: 'none' }} data-testid="commands-chart" data-rows={L.names.length}>
             <canvas ref={ref} />
           </div>
@@ -226,11 +313,12 @@ export function CommandsPanel({ id }: { id: string }) {
   );
 }
 
-function drawCommands(dc: DrawContext, id: string) {
+function drawCommands(dc: DrawContext, id: string, hoverStore: Store<Hover>) {
   const { ctx, width, height } = dc;
   const pal = T();
   const settings = panelStore.get().panels[id] as CommandsSettings | undefined;
   if (!settings) return;
+  const hover = hoverStore.get();
   const lay = layout(settings);
   const time = timeStore.get();
   const [t0, t1] = time.view;
@@ -238,62 +326,122 @@ function drawCommands(dc: DrawContext, id: string) {
   const x0 = LABEL_W;
   const x1 = width - 8;
   const xOf = (t: number) => x0 + ((t - t0) / (t1 - t0)) * (x1 - x0);
-  const cur = time.hover ?? time.cursor;
-
-  // header: what is running at the cursor, per log
-  ctx.font = '11px sans-serif';
+  // during playback the hover is ignored: what runs is what the playhead shows
+  const cur = time.playing ? time.cursor : (time.hover ?? time.cursor);
   ctx.textBaseline = 'middle';
-  lay.logs.forEach((log, i) => {
-    const y = 4 + i * 16 + 8;
-    ctx.fillStyle = log.color;
+
+  // legend: which lane is which log, and how many commands each runs at the cursor
+  if (lay.logs.length > 1) {
+    let x = 8;
+    const y = 11;
+    ctx.font = '11px sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText(fitText(ctx, log.name, LABEL_W - 14), 8, y);
-    const rows = lay.byLog.get(log.id);
-    let text = 'no command list in this log';
-    if (rows) {
-      const running = cur === null ? [] : lay.names.filter((n) => rows.get(n)?.runs.some((u) => cur >= u.start + log.offset && cur < u.end + log.offset));
-      text = cur === null ? 'set the cursor to see what is running' : running.length ? `running: ${running.join(', ')}` : 'nothing running';
+    for (const log of lay.logs) {
+      const rows = lay.byLog.get(log.id);
+      let n = 0;
+      if (rows && cur !== null) for (const row of rows.values()) if (row.runs.some((u) => cur >= u.start + log.offset && cur < u.end + log.offset)) n++;
+      const label = !rows ? `${log.name}: no command list` : cur === null ? log.name : `${log.name}: ${n} running`;
+      ctx.fillStyle = log.color;
+      ctx.fillRect(x, y - 4, 8, 8);
+      x += 13;
+      ctx.fillStyle = rows ? pal.fg : pal.fg2;
+      ctx.fillText(label, x, y);
+      x += ctx.measureText(label).width + 18;
+      if (x > width - 40) break;
     }
-    ctx.fillStyle = rows ? pal.fg : pal.fg2;
-    ctx.fillText(fitText(ctx, text, x1 - x0), x0, y);
-  });
+  }
 
   const top = lay.headH;
   lay.names.forEach((name, r) => {
     const y = top + r * lay.rowH;
+    // what this command is doing at the cursor, in each log
+    const states = lay.logs.map((log) => {
+      const row = lay.byLog.get(log.id)?.get(name);
+      const run = cur === null ? undefined : row?.runs.find((u) => cur >= u.start + log.offset && cur < u.end + log.offset);
+      return { log, row, run };
+    });
+    const on = states.find((s) => s.run);
+    let flash = 0;
+    let flashColor = '';
+    for (const s of states) {
+      if (!s.run || cur === null) continue;
+      const f = 1 - (cur - (s.run.start + s.log.offset)) / FLASH;
+      if (f > flash) {
+        flash = f;
+        flashColor = s.log.color;
+      }
+    }
+
+    // row background: tinted while running, flashing just after it started
     ctx.fillStyle = r % 2 ? pal.rowBg : pal.plotBg;
     ctx.fillRect(0, y, width, lay.rowH);
-    let active = false;
-    lay.logs.forEach((log, li) => {
-      const row = lay.byLog.get(log.id)?.get(name);
+    if (hover.row === r) {
+      ctx.fillStyle = pal.hoverBg;
+      ctx.fillRect(0, y, width, lay.rowH);
+    }
+    if (on) {
+      ctx.fillStyle = withAlpha(on.log.color, 0.16);
+      ctx.fillRect(0, y, width, lay.rowH);
+    }
+    if (flash > 0) {
+      ctx.fillStyle = withAlpha(flashColor, 0.42 * flash);
+      ctx.fillRect(0, y, width, lay.rowH);
+    }
+
+    // runs: the one at the cursor in full color and outlined, the others dimmed
+    states.forEach(({ log, row, run }, li) => {
       if (!row) return;
-      const ly = y + 4 + li * LANE;
-      for (const u of row.runs) {
+      const ly = y + 5 + li * LANE;
+      row.runs.forEach((u, ui) => {
         const a = u.start + log.offset;
         const b = u.end + log.offset;
-        if (b < t0 || a > t1) continue;
-        const on = cur !== null && cur >= a && cur < b;
-        if (on) active = true;
+        if (b < t0 || a > t1) return;
         const xa = Math.max(x0, xOf(a));
         const xb = Math.min(x1, xOf(b));
-        ctx.fillStyle = on ? log.color : withAlpha(log.color, 0.62);
-        ctx.fillRect(xa, ly, Math.max(1.5, xb - xa), LANE - 2);
-      }
+        const w = Math.max(2, xb - xa);
+        const now = u === run;
+        ctx.fillStyle = now ? log.color : withAlpha(log.color, 0.4);
+        ctx.fillRect(xa, ly, w, LANE - 2);
+        if (now || hover.run === `${log.id}:${ui}`) {
+          ctx.strokeStyle = pal.strong;
+          ctx.lineWidth = 1;
+          ctx.strokeRect(xa + 0.5, ly + 0.5, Math.max(1, w - 1), LANE - 3);
+        }
+      });
     });
-    // label column
+
+    // name column: a bar in the log's color at the edge, bold name, how long this run has been going
     ctx.fillStyle = pal.bg2;
     ctx.fillRect(0, y, LABEL_W - 4, lay.rowH);
-    const primary = lay.logs.map((l) => lay.byLog.get(l.id)?.get(name)).find(Boolean);
-    const stat = primary ? `${primary.total >= 100 ? primary.total.toFixed(0) : primary.total.toFixed(1)} s · ${primary.runs.length}×` : '';
-    ctx.font = '10px ui-monospace, Menlo, monospace';
+    if (hover.row === r) {
+      ctx.fillStyle = pal.hoverBg;
+      ctx.fillRect(0, y, LABEL_W - 4, lay.rowH);
+    }
+    if (on) {
+      ctx.fillStyle = withAlpha(on.log.color, 0.24);
+      ctx.fillRect(0, y, LABEL_W - 4, lay.rowH);
+      ctx.fillStyle = on.log.color;
+      ctx.fillRect(0, y, 4, lay.rowH);
+    }
+    if (flash > 0) {
+      ctx.fillStyle = withAlpha(flashColor, 0.5 * flash);
+      ctx.fillRect(0, y, LABEL_W - 4, lay.rowH);
+    }
+    const primary = states.map((s) => s.row).find(Boolean);
+    const stat =
+      on && cur !== null ? `running ${duration(cur - (on.run!.start + on.log.offset))}` : primary ? `${duration(primary.total)} · ${primary.runs.length}×` : '';
+    ctx.font = on ? 'bold 10px ui-monospace, Menlo, monospace' : '10px ui-monospace, Menlo, monospace';
     ctx.textAlign = 'right';
-    ctx.fillStyle = pal.fg2;
+    ctx.fillStyle = on ? pal.strong : pal.fg2;
     ctx.fillText(stat, LABEL_W - 10, y + lay.rowH / 2);
     const statW = ctx.measureText(stat).width;
-    ctx.font = active ? 'bold 11px sans-serif' : '11px sans-serif';
+    ctx.font = on ? 'bold 12px sans-serif' : '11px sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillStyle = active ? pal.strong : pal.fg;
-    ctx.fillText(fitText(ctx, name, LABEL_W - 26 - statW), 8, y + lay.rowH / 2);
+    ctx.fillStyle = on ? pal.strong : pal.fg;
+    ctx.fillText(fitText(ctx, name, LABEL_W - 28 - statW), 12, y + lay.rowH / 2);
+    // a thin line between rows
+    ctx.fillStyle = pal.grid;
+    ctx.fillRect(0, y + lay.rowH - 1, width, 1);
   });
   const bottom = top + lay.names.length * lay.rowH;
   drawTimeAxis(ctx, x0, x1, Math.min(bottom, height - AXIS_H), t0, t1, top);

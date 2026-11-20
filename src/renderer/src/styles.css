@@ -2515,6 +2515,9 @@ h4 {
   flex: 1;
   min-height: 0;
 }
+.commands-none {
+  padding: 8px 12px;
+}
 
 /* Robot appearance editor */
 .modal.robot-modal {

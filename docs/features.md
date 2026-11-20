@@ -99,7 +99,7 @@ Last brought up to date: 2026-11-17 (after pull request #14).
 ### 2.7 See what the robot code was doing (the Commands panel)
 
 1. **Add panel**, Commands.
-2. Every command that ran is a row; each run is a bar on that row, one lane per log. Hover a bar for its start and length; **click it to go there**. The panel also lists what is running at the cursor, and each command's total time and run count.
+2. Every command that ran is a row; each run is a bar on that row, one lane per log. Hover a bar for its start and length; **click it to go there**. Commands running at the cursor light up (tinted row, bold name, how long it has run), and one that just started flashes. **Click a name** to go to that command's next run (Shift+click: the one before).
 3. **No commands shown?** The robot code must record them. Section 8, Commands has the two ways, with code. You never add fields to this panel by hand: it finds the command list itself. Its **Source field** button is only for a log that keeps the list under an unusual name.
 
 ### 2.8 Check the driver's inputs (the Controller panel)
@@ -120,6 +120,7 @@ From left to right:
 
 - **Sidebar button** (Ctrl+B): shows or hides the field list.
 - **File menu:** open logs, export CSV, copy panel as image, match report (PDF), close all logs.
+- **Undo and redo** (Ctrl+Z, Ctrl+Shift+Z, or the Edit menu): take back what you changed: panels added, removed, moved or set up, timeline tracks, logs opened or closed (a closed log opens again from its file), offsets, colors, hidden logs, the alignment mode, bookmarks and robot profiles. Moving around in time (cursor, zoom, playback) is not undone. Each step is one change you made; a toast says what was undone. In a text box, Ctrl+Z undoes your typing instead.
 - **Log chips**, one per open log, in its color:
   - **click the colored dot** to hide or show that log everywhere;
   - **click the name** to make it the *primary* log (the alignment reference, and the log whose modes shade the graphs). The primary log has a star;
@@ -319,7 +320,12 @@ Any panel that lacks what it needs says so and how to log it, and Log info & hea
   - **Name your commands** (`.withName("IntakeNote")`), or rows read `SequentialCommandGroup` and `FunctionalCommand`. The scheduler only lists top-level commands: a command inside a group shows as its group.
 - **Use:**
   - one row per command, one lane per log; each bar is one run. Hover for details; **click a bar to go to its start**;
-  - the list of what is running at the cursor, and each command's total time and run count;
+  - **what runs at the cursor stands out:** its row is tinted in the log's color with a bar at its left edge, its name is bold, its run is outlined, and it says how long the run has been going ("running 2.4 s"). Everything else is dimmed;
+  - **a command that just started flashes** its row for about three quarters of a second (of log time), so during playback you see which one went off;
+  - **click a command's name to go to its next run**, Shift+click for the one before. Hovering a row highlights it;
+  - each command's total time and run count, when it is not running;
+  - **Filter commands** in the toolbar keeps only the commands whose names contain what you type;
+  - with several logs, a line on top tells the lanes apart and says how many commands each log runs at the cursor;
   - **Source field** in its toolbar is only for a log that keeps the list under another name: pick a text-list (`string[]`) field. The small remove button next to a picked field goes back to finding it automatically. When it found the list itself, the toolbar says where from ("from Scheduler/Names").
 
 ### Video
@@ -526,6 +532,7 @@ A preset says where panels go; a **robot profile** describes the robot and appli
 | F | Zoom to the whole log |
 | A / T / E / S | Zoom to auto / teleop / enabled / the selection |
 | = / - | Zoom in / out (time) |
+| Ctrl+Z / Ctrl+Shift+Z | Undo / redo |
 | Ctrl+O | Open logs |
 | Ctrl+S | Save the layout as a preset (updates the active one) |
 | Ctrl+E | Export CSV |

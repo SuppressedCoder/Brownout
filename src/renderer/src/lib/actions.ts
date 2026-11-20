@@ -15,8 +15,9 @@ import { grid } from '../components/Grid';
 import { openGuide } from '../components/Guide';
 import { capturePanel } from './capture';
 import { exportMatchReport } from './report';
+import { undo, redo } from './undo';
 
-export type ActionGroup = 'Playback' | 'Navigate' | 'Zoom' | 'Files & layout' | 'View' | 'Robot';
+export type ActionGroup = 'Playback' | 'Navigate' | 'Zoom' | 'Edit' | 'Files & layout' | 'View' | 'Robot';
 
 export interface Action {
   id: string;
@@ -89,6 +90,15 @@ export const ACTIONS: Action[] = [
   { id: 'zoomTeleop', label: 'Zoom to teleop', group: 'Zoom', defaultKey: 'T', run: () => zoomTo('teleop') },
   { id: 'zoomEnabled', label: 'Zoom to enabled', group: 'Zoom', defaultKey: 'E', run: () => zoomTo('enabled') },
   { id: 'zoomSelection', label: 'Zoom to the selection', group: 'Zoom', defaultKey: 'S', run: () => zoomTo('selection') },
+
+  {
+    id: 'undo',
+    label: 'Undo (panels, layout, logs and offsets, bookmarks, robot profiles)',
+    group: 'Edit',
+    defaultKey: 'Ctrl+Z',
+    run: () => void undo(),
+  },
+  { id: 'redo', label: 'Redo', group: 'Edit', defaultKey: 'Ctrl+Shift+Z', run: () => void redo() },
 
   { id: 'open', label: 'Open logs…', group: 'Files & layout', defaultKey: 'Ctrl+O', run: () => void openViaDialog() },
   {
