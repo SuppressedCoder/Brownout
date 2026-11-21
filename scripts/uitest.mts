@@ -1849,6 +1849,21 @@ async function main() {
     return !!v && v.readyState >= 2;
   });
   const svt = () => page.evaluate(`document.querySelector('[data-testid=video-sync-video]').currentTime`) as Promise<number>;
+  // the picture zooms like the 2D field: wheel, then Fit
+  const pic = (await page.locator('[data-testid=video-sync-picture]').boundingBox())!;
+  await page.mouse.move(pic.x + pic.width * 0.3, pic.y + pic.height * 0.3);
+  await page.mouse.wheel(0, -300);
+  await page.waitForTimeout(150);
+  const syncZoomed = await page.locator('[data-testid=video-sync-video]').evaluate((v) => (v as unknown as { style: { transform: string } }).style.transform);
+  await page.locator('[data-testid=video-sync-fit]').click();
+  await page.waitForTimeout(100);
+  check(
+    'the sync view\u2019s picture zooms with the wheel, and Fit shows all of it again',
+    syncZoomed.includes('scale(') &&
+      (await page.locator('[data-testid=video-sync-video]').evaluate((v) => (v as unknown as { style: { transform: string } }).style.transform)) === '' &&
+      (await page.locator('[data-testid=video-sync-fit]').isDisabled()),
+    syncZoomed,
+  );
   check('the sync view offers the log’s auto start', (await page.locator('[data-testid=video-sync-marker-auto]').count()) === 1);
   await page.waitForSelector('[data-testid=video-sync-time][data-fps]');
   {
@@ -1946,6 +1961,47 @@ async function main() {
   check('the Sync menu is fully visible', (await menuState(page)) === 'ok', await menuState(page));
   await page.locator('.menu .menu-item', { hasText: 'This frame is the cursor' }).click();
   await page.waitForSelector('[data-testid=video-synced]');
+  {
+    // the panel's picture zooms around the pointer, drags, and double-click fits
+    const vid = await state<string>(page, 'Object.entries(s.panelStore.get().panels).find(([, p]) => p.type === "video")[0]');
+    const view = () => state<{ zoom?: number; center?: [number, number] }>(page, `s.panelStore.get().panels['${vid}']`);
+    const box = (await page.locator('[data-testid=video-frame]').boundingBox())!;
+    const at = { x: box.x + box.width * 0.75, y: box.y + box.height * 0.25 };
+    const before = await page.locator('[data-testid=video]').boundingBox();
+    await page.mouse.move(at.x, at.y);
+    await page.mouse.wheel(0, -400);
+    await page.waitForTimeout(150);
+    const z = await view();
+    // the point under the pointer stays put: it is at the same fraction of the zoomed picture
+    const after = (await page.locator('[data-testid=video]').boundingBox())!;
+    const fx0 = (at.x - before!.x) / before!.width;
+    const fx1 = (at.x - after.x) / after.width;
+    check(
+      'the video zooms with the wheel around the pointer, like the 2D field',
+      (z.zoom ?? 1) > 1.5 && Math.abs(fx0 - fx1) < 0.02 && after.width > before!.width * 1.5,
+      `${z.zoom} ${fx0.toFixed(3)} ${fx1.toFixed(3)}`,
+    );
+    await page.mouse.move(at.x, at.y);
+    await page.mouse.down();
+    await page.mouse.move(at.x - 60, at.y + 30, { steps: 6 });
+    await page.mouse.up();
+    await page.waitForTimeout(100);
+    const dragged = await view();
+    check(
+      '...a drag pans it',
+      !!dragged.center && !!z.center && dragged.center[0] > z.center[0] && dragged.center[1] < z.center[1] && dragged.zoom === z.zoom,
+      JSON.stringify([z.center, dragged.center]),
+    );
+    check('...and Fit lights up to bring the whole picture back', !(await page.locator('[data-testid=video-fit]').isDisabled()));
+    await page.locator('[data-testid=video-frame]').dblclick();
+    await page.waitForTimeout(100);
+    const fit = await view();
+    check(
+      '...as does a double-click',
+      (fit.zoom ?? 1) === 1 && !fit.center && (await page.locator('[data-testid=video-fit]').isDisabled()),
+      JSON.stringify(fit),
+    );
+  }
   const sync = await state<{ lmv: number; offset: number }>(
     page,
     `(() => { const l = s.sessionStore.get().logs[0]; return { lmv: s.videoStore.get().byLog[l.fileName].logMinusVideo, offset: l.offset }; })()`,

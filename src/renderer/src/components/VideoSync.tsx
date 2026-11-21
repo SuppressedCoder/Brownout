@@ -35,6 +35,7 @@ import { T } from '../lib/theme';
 import { chaseSeek, seekTarget } from '../lib/videoSeek';
 import { formatTime, parseTimeInput, clampWindow } from '@core/alignment';
 import { Toolbar, ToolButton, ToolSelect, ToolSpacer } from './Toolbar';
+import { useZoomPan, zoomTransform, isZoomed, type ZoomView } from '../lib/zoomPan';
 
 /** Frame rate assumed until the video's own is measured. */
 const DEFAULT_FPS = 30;
@@ -144,6 +145,11 @@ function VideoSync({ log }: { log: LogEntry }) {
   const entry = videos.byLog[log.fileName];
   const url = videos.urls[log.fileName];
   const videoRef = useRef<HTMLVideoElement>(null);
+  // the picture zooms and pans like the 2D field; this view starts at the whole picture each time
+  const pictureRef = useRef<HTMLDivElement>(null);
+  const picture = useMemo(() => createStore<ZoomView>({}), []);
+  const pictureView = useStore(picture, (s) => s);
+  useZoomPan(pictureRef, picture.get, (v) => picture.set(v), [url]);
   const local = useMemo(
     () =>
       createStore<SyncState>({
@@ -371,10 +377,11 @@ function VideoSync({ log }: { log: LogEntry }) {
           <div className="panel-placeholder">Choose this log&apos;s video in the video panel first.</div>
         ) : (
           <div className="vsync-body">
-            <div className="vsync-video">
+            <div className="vsync-video" ref={pictureRef} data-testid="video-sync-picture">
               <video
                 ref={videoRef}
                 src={url}
+                style={{ transform: zoomTransform(pictureView) }}
                 muted={!sound}
                 playsInline
                 preload="auto"
@@ -421,6 +428,19 @@ function VideoSync({ log }: { log: LogEntry }) {
                 onClick={() => syncPrefs.set({ sound: !sound })}
                 title="Sound in this view: the start horn and the teleop bell help find the moment"
               />
+              <ToolButton
+                low
+                disabled={!isZoomed(pictureView)}
+                onClick={() => picture.set({ zoom: 1, center: undefined })}
+                title={
+                  isZoomed(pictureView)
+                    ? 'Show the whole picture again (double-click the video does the same)'
+                    : 'The whole picture is showing. Wheel on it zooms, drag pans.'
+                }
+                testId="video-sync-fit"
+              >
+                Fit
+              </ToolButton>
               <GotoBox onGo={seekTo} />
               <Readout store={local} />
               <ToolSpacer />

@@ -9,6 +9,9 @@
  *
  * Seeks go through chaseSeek (lib/videoSeek.ts): one at a time, straight to
  * the newest target, so dragging doesn't freeze the picture.
+ *
+ * The picture zooms and pans like the 2D field (lib/zoomPan.ts): wheel,
+ * drag, double-click or Fit for the whole picture.
  */
 import { useEffect, useRef, useState } from 'react';
 import { panelStore, updatePanel, type VideoSettings } from '../state/panels';
@@ -24,6 +27,7 @@ import { formatTime } from '@core/alignment';
 import { Toolbar, ToolButton, ToolSelect, ToolGroup, ToolSpacer } from '../components/Toolbar';
 import { MenuButton, MenuItem, MenuSeparator } from '../components/Menu';
 import { Caret } from '../components/Icon';
+import { useZoomPan, zoomTransform, isZoomed } from '../lib/zoomPan';
 
 /** One frame at 30 fps: the step used by the frame buttons. */
 const FRAME = 1 / 30;
@@ -49,6 +53,14 @@ export function VideoPanel({ id }: { id: string }) {
   const [note, setNote] = useState('');
   const [videoPlaying, setVideoPlaying] = useState(false);
   const synced = !!entry && entry.logMinusVideo !== null;
+  const frameRef = useRef<HTMLDivElement>(null);
+  useZoomPan(
+    frameRef,
+    () => panelStore.get().panels[id] as VideoSettings,
+    (v) => updatePanel<VideoSettings>(id, v),
+    [id, url, missing],
+  );
+  const zoomed = isZoomed(settings);
 
   // Reopen a remembered video
   useEffect(() => {
@@ -244,6 +256,16 @@ export function VideoPanel({ id }: { id: string }) {
         {url && synced && (
           <ToolButton icon="frameForward" text="Video one frame later" onClick={() => nudge(1)} title="Fine-tune the sync: show the video one frame later" />
         )}
+        {url && (
+          <ToolButton
+            disabled={!zoomed}
+            onClick={() => updatePanel<VideoSettings>(id, { zoom: 1, center: undefined })}
+            title={zoomed ? 'Show the whole picture again (double-click the video does the same)' : 'The whole picture is showing. Wheel zooms, drag pans.'}
+            testId="video-fit"
+          >
+            Fit
+          </ToolButton>
+        )}
         {logs.length > 1 && (
           <ToolGroup low className="hdr-label">
             Log
@@ -288,22 +310,25 @@ export function VideoPanel({ id }: { id: string }) {
         </div>
       ) : (
         <div className="video-host">
-          <video
-            ref={videoRef}
-            src={url}
-            muted
-            playsInline
-            preload="auto"
-            data-testid="video"
-            onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
-            onTimeUpdate={(e) => setVideoT(seekTarget(e.currentTarget))}
-            onSeeked={(e) => setVideoT(seekTarget(e.currentTarget))}
-            onPlay={() => setVideoPlaying(true)}
-            onPause={() => setVideoPlaying(false)}
-            onError={() =>
-              toast(`This video cannot be played here (${entry.name}). MP4 with H.264 and WebM work; HEVC clips need converting.`, 'error', undefined, 9000)
-            }
-          />
+          <div className="video-frame" ref={frameRef} data-testid="video-frame">
+            <video
+              ref={videoRef}
+              src={url}
+              muted
+              playsInline
+              preload="auto"
+              style={{ transform: zoomTransform(settings) }}
+              data-testid="video"
+              onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+              onTimeUpdate={(e) => setVideoT(seekTarget(e.currentTarget))}
+              onSeeked={(e) => setVideoT(seekTarget(e.currentTarget))}
+              onPlay={() => setVideoPlaying(true)}
+              onPause={() => setVideoPlaying(false)}
+              onError={() =>
+                toast(`This video cannot be played here (${entry.name}). MP4 with H.264 and WebM work; HEVC clips need converting.`, 'error', undefined, 9000)
+              }
+            />
+          </div>
           {note && <div className="video-note">{note}</div>}
           <div className="video-bar">
             <span className="mono" data-testid="video-time">
