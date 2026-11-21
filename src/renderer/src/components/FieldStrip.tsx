@@ -8,7 +8,15 @@
  */
 import type { ReactNode } from 'react';
 import { useStore } from '../state/store';
-import { panelStore, updatePanel, type GraphSettings, type PanelSettings, type StatsSettings, type TableSettings } from '../state/panels';
+import {
+  panelStore,
+  updatePanel,
+  type CommandsSettings,
+  type GraphSettings,
+  type PanelSettings,
+  type StatsSettings,
+  type TableSettings,
+} from '../state/panels';
 import { useFieldIndex, type FieldLike, type FieldSpec } from '../lib/fields';
 import { FIELD_DASHES } from '../lib/colors';
 import { FieldList, FieldSlot, KeyText, type FieldListItem } from './FieldSlot';
@@ -25,6 +33,7 @@ export const PANEL_SPECS: Partial<Record<PanelSettings['type'], FieldSpec | unde
   compare: { types: ['number'] },
   stats: { types: ['number'] },
   field: { types: [...POSES, ...POSES.map((p) => `${p}[]`)] },
+  commands: { types: ['string[]'] },
 };
 
 /** Put keys into a list at an index; a key already in the list moves there. */
@@ -120,6 +129,16 @@ export function panelEdit(id: string, s: PanelSettings): PanelEdit | null {
       replace: (_at, f) => updatePanel<StatsSettings>(id, { key: f.key }),
       remove: () => updatePanel<StatsSettings>(id, { key: undefined }),
     };
+  // Commands finds its list by itself; a list picked by hand can be swapped or removed (back to finding it)
+  if (s.type === 'commands')
+    return {
+      keys: s.sourceKey ? [s.sourceKey] : [],
+      spec,
+      single: true,
+      insert: (_at, fs) => fs[0] && updatePanel<CommandsSettings>(id, { sourceKey: fs[0].key }),
+      replace: (_at, f) => updatePanel<CommandsSettings>(id, { sourceKey: f.key }),
+      remove: () => updatePanel<CommandsSettings>(id, { sourceKey: undefined }),
+    };
   return null;
 }
 
@@ -152,7 +171,7 @@ export function PanelFieldStrip({ id }: { id: string }) {
   const logs = useStore(sessionStore, (st) => st.logs);
   const hidden = useStripHidden(id);
   if (!s || hidden) return null;
-  const edit = panelEdit(id, s);
+  const edit = s.type === 'commands' ? null : panelEdit(id, s);
   if (!edit) return null;
 
   if (s.type === 'stats') {

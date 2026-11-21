@@ -19,7 +19,7 @@ import { panelStore, PANEL_TITLES, panelAccepts, addFieldsToPanel, type PanelSet
 import { sessionStore, type LogEntry } from '../state/session';
 import { timeStore } from '../state/time';
 import { toast } from '../state/ui';
-import { gridStore, linkStore, pointAtField, panelColorVar, shownKeys } from '../lib/panelLinks';
+import { gridStore, linkStore, pointAtField, panelColorVar, shownKeys, inPanelsStore, toggleSectionCollapsed } from '../lib/panelLinks';
 import { useFieldIndex, keyMatchesSearch, groupByFolder, specAccepts, specReason } from '../lib/fields';
 import { dragStore, hasFieldDrag, readFieldDrag, setFieldDrag } from '../lib/dnd';
 import { FolderGroups } from './FolderGroups';
@@ -30,7 +30,6 @@ import { formatValue } from '../lib/format';
 import { grid } from './Grid';
 import { FieldList, FieldSlot, KeyText } from './FieldSlot';
 import { LineSwatch, panelEdit, toggleAxis, openFieldSetup, type PanelEdit } from './FieldStrip';
-import { CommandsSource } from '../panels/CommandsPanel';
 import { reportAdd } from './Sidebar';
 import { Icon } from './Icon';
 
@@ -258,9 +257,12 @@ function Section({ id, n, q, logs, all }: { id: string | null; n: number; q: str
     setOver(null);
     setTarget(false);
   }, [dragged]);
+  const collapsed = useStore(inPanelsStore, (st) => st.collapsed);
   const s = id ? panels[id] : undefined;
   const edit = id && s ? panelEdit(id, s) : null;
-  const keys = s ? shownKeys(s, all).filter((k) => keyMatchesSearch(k, q)) : [];
+  const shown = s ? shownKeys(s, all) : [];
+  const keys = shown.filter((k) => keyMatchesSearch(k, q));
+  const min = !!id && collapsed.includes(id);
   const title = (id && grid.api?.getPanel(id)?.title) || (s ? PANEL_TITLES[s.type] : '');
   const canTake = !!s && !!dragged && dragged.length > 0 && panelAccepts(s.type, dragged[0].kind, dragged[0].structName);
 
@@ -281,9 +283,12 @@ function Section({ id, n, q, logs, all }: { id: string | null; n: number; q: str
     reportAdd(items.length, r.added, r.skipped, PANEL_TITLES[s.type]);
   };
 
+  // a panel that never shows a field (console, log info), or finds its own (Commands), has nothing to list
+  if (!id || !s || (!shown.length && (!edit || s.type === 'commands'))) return null;
+
   return (
     <section
-      className={`ip-sec${canTake ? ' drop-lit' : ''}${target ? ' drop-target' : ''}`}
+      className={`ip-sec${canTake ? ' drop-lit' : ''}${target ? ' drop-target' : ''}${min ? ' collapsed' : ''}`}
       data-testid="ip-section"
       data-panel={id ?? undefined}
       onDragEnter={onDragOver}
@@ -296,60 +301,64 @@ function Section({ id, n, q, logs, all }: { id: string | null; n: number; q: str
       }}
       onDrop={onDrop}
     >
-      <div className="ip-head">
+      <button
+        className="ip-head"
+        onClick={() => toggleSectionCollapsed(id)}
+        aria-expanded={!min}
+        title={min ? 'Show this panel\u2019s fields' : 'Minimize'}
+        data-testid="ip-toggle"
+      >
+        <Icon name={min ? 'chevronRight' : 'chevronDown'} size={10} />
         {n > 0 && (
           <span className="pn" style={{ background: panelColorVar(n) }}>
             {n}
           </span>
         )}
         <span className="ip-title">{title}</span>
-      </div>
-      <div className="ip-body">
-        {/* fields that share a folder sit in a box under it, in the panel's order */}
-        {id && s && (
-          <FolderGroups
-            groups={groupByFolder(
-              keys.map((key) => ({ key })),
-              { sort: false },
-            )}
-            testId="ip-group"
-            row={({ key }, name) => {
-              const f = fields.get(key);
-              return (
-                <Row
-                  id={id}
-                  k={key}
-                  name={name}
-                  s={s}
-                  logs={logs}
-                  unit={f?.unit}
-                  kind={f ? { kind: f.kind, structName: f.structName } : undefined}
-                  edit={edit}
-                  over={over}
-                  setOver={setOver}
-                />
-              );
-            }}
-          />
-        )}
-        {s && !keys.length && q && <div className="hint">No matches.</div>}
-        {id && s?.type === 'commands' && (
-          <div className="ip-add">
-            <CommandsSource id={id} />
-          </div>
-        )}
-        {id && edit && !edit.single && (
-          <div className="ip-add">
-            <FieldList items={[]} spec={edit.spec} panel={id} onInsert={(_at, fs) => edit.insert(edit.keys.length, fs)} onRemove={() => {}} testId="ip-add" />
-          </div>
-        )}
-        {id && edit?.single && !edit.keys.length && (
-          <div className="ip-add">
-            <FieldSlot inline spec={edit.spec} value={undefined} panel={id} onPick={(_key, f) => edit.insert(0, [f])} testId="ip-slot" />
-          </div>
-        )}
-        {s && !edit && s.type !== 'commands' && !keys.length && !q && <div className="hint">No fields.</div>}
-      </div>
+        {min && <span className="ip-count">{shown.length}</span>}
+      </button>
+      {!min && (
+        <div className="ip-body">
+          {/* fields that share a folder sit in a box under it, in the panel's order */}
+          {
+            <FolderGroups
+              groups={groupByFolder(
+                keys.map((key) => ({ key })),
+                { sort: false },
+              )}
+              testId="ip-group"
+              row={({ key }, name) => {
+                const f = fields.get(key);
+                return (
+                  <Row
+                    id={id}
+                    k={key}
+                    name={name}
+                    s={s}
+                    logs={logs}
+                    unit={f?.unit}
+                    kind={f ? { kind: f.kind, structName: f.structName } : undefined}
+                    edit={edit}
+                    over={over}
+                    setOver={setOver}
+                  />
+                );
+              }}
+            />
+          }
+          {!keys.length && q && <div className="hint">No matches.</div>}
+          {edit && !edit.single && (
+            <div className="ip-add">
+              <FieldList items={[]} spec={edit.spec} panel={id} onInsert={(_at, fs) => edit.insert(edit.keys.length, fs)} onRemove={() => {}} testId="ip-add" />
+            </div>
+          )}
+          {edit?.single && !edit.keys.length && s.type !== 'commands' && (
+            <div className="ip-add">
+              <FieldSlot inline spec={edit.spec} value={undefined} panel={id} onPick={(_key, f) => edit.insert(0, [f])} testId="ip-slot" />
+            </div>
+          )}
+        </div>
+      )}
     </section>
   );
 }

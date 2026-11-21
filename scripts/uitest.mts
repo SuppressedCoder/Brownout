@@ -982,14 +982,24 @@ async function main() {
     // In panels
     await page.locator('[data-testid=in-panels-toggle]').click();
     await page.waitForTimeout(400);
-    const areas = await state<number>(page, 'document.querySelectorAll(".dv-groupview").length');
-    const sections = await page.locator('[data-testid=ip-section]').count();
+    const types = await state<string[]>(
+      page,
+      '[...document.querySelectorAll("[data-testid=ip-section]")].map((e) => s.panelStore.get().panels[e.dataset.panel]?.type)',
+    );
     const values = await page.locator('[data-testid=ip-value]').allInnerTexts();
     check(
-      'In panels shows one section per grid area, with values at the cursor',
-      sections === areas && values.length >= 2 && values.some((v) => /\d/.test(v)),
-      `${sections} sections, ${areas} areas, values ${values.slice(0, 4).join(' | ')}`,
+      'In panels shows a section for each panel in front that shows fields, with values at the cursor',
+      types.length >= 1 && values.length >= 2 && values.some((v) => /\d/.test(v)),
+      `${types.join(',')} | values ${values.slice(0, 4).join(' | ')}`,
     );
+    check('...and none for panels that never show a field (console, log info)', !types.includes('console') && !types.includes('info'), types.join(','));
+    const firstSec = page.locator('[data-testid=ip-section]').first();
+    await firstSec.locator('[data-testid=ip-toggle]').click();
+    await page.waitForTimeout(150);
+    const minimized = (await firstSec.getAttribute('class'))?.includes('collapsed') && (await firstSec.locator('[data-testid=ip-row]').count()) === 0;
+    await firstSec.locator('[data-testid=ip-toggle]').click();
+    await page.waitForTimeout(150);
+    check('a section\u2019s header minimizes it, and again brings it back', !!minimized && (await firstSec.locator('[data-testid=ip-row]').count()) > 0);
     check(
       '...and the field list and inspector step aside',
       (await page.locator('[data-testid=field-tree]').isHidden()) && (await page.locator('.inspector').count()) === 0,

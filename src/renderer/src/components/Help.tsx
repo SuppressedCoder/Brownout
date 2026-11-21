@@ -50,6 +50,7 @@ export function Help() {
     ['Panel strip: drop a field on a chip / its edge / + Field', 'Swap that field (it keeps its line and axis) / add it beside / add it at the end'],
     ['Graph: drop a field on its left or right half', 'Add it on that axis'],
     ['Field list: point at a field / a panel tab', 'Lights the panels showing it / the fields that panel shows'],
+    ['In panels: click a section’s header', 'Minimize it (remembered); click again to bring it back'],
     ['In panels: drag a row onto another section / a row / a row’s edge', 'Add it to that panel / swap that field / put it above or below (reorder)'],
     ['Field tree: double-click a field', 'Add it to the active panel'],
     ['Field search: type the start of a type, then Tab', 'Filter by that type (Pose2d, boolean…); Backspace on an empty search removes it'],

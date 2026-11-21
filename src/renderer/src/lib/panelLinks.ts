@@ -133,11 +133,27 @@ function readInPanels(): boolean {
     return false;
   }
 }
-export const inPanelsStore = createStore({ on: readInPanels() });
+/** In panels' minimized sections, by panel id, remembered like the switch. */
+const COLLAPSED_KEY = 'brownout.inPanels.collapsed.v1';
+function readCollapsed(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? '[]');
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+export const inPanelsStore = createStore({ on: readInPanels(), collapsed: readCollapsed() });
 inPanelsStore.subscribe((s) => {
   try {
     localStorage.setItem(IN_PANELS_KEY, s.on ? '1' : '0');
+    localStorage.setItem(COLLAPSED_KEY, JSON.stringify(s.collapsed));
   } catch {
     // private window or storage blocked: the switch just isn't remembered
   }
 });
+
+/** Minimize or restore a panel's In panels section. */
+export function toggleSectionCollapsed(id: string): void {
+  inPanelsStore.set((s) => ({ collapsed: s.collapsed.includes(id) ? s.collapsed.filter((x) => x !== id) : [...s.collapsed, id] }));
+}
