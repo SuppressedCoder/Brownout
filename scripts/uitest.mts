@@ -203,24 +203,30 @@ async function main() {
     await input.type('power');
     await page.waitForTimeout(200);
     const grouped = await page.locator('[data-testid=search-group]').evaluateAll((gs) =>
-      gs.map((g) => ({
-        folder: (g as unknown as { querySelector: (s: string) => { textContent: string } | null }).querySelector('.search-folder bdi')?.textContent ?? '',
-        rows: [
-          ...(
-            g as unknown as {
-              querySelectorAll: (s: string) => Iterable<{ dataset: { key: string }; querySelector: (s: string) => { textContent: string } | null }>;
-            }
-          ).querySelectorAll('.tree-row.field'),
-        ].map((r) => ({
-          key: r.dataset.key,
-          name: r.querySelector('.name')?.textContent ?? '',
-        })),
-      })),
+      gs.map((g) => {
+        const el = g as unknown as {
+          dataset: { folder: string };
+          parentElement: { closest: (s: string) => unknown } | null;
+          querySelectorAll: (s: string) => Iterable<{ dataset: { key: string }; querySelector: (s: string) => { textContent: string } | null }>;
+        };
+        return {
+          folder: el.dataset.folder,
+          top: !el.parentElement?.closest('[data-testid=search-group]'),
+          inner: [...el.querySelectorAll(':scope > [data-testid=search-group]')].length,
+          rows: [...el.querySelectorAll(':scope > .tree-row.field')].map((r) => ({
+            key: r.dataset.key,
+            name: r.querySelector('.name')?.textContent ?? '',
+          })),
+        };
+      }),
     );
+    const tops = grouped.filter((g) => g.top).map((g) => g.folder);
     check(
-      'search results that share a folder sit in a box under it, each showing only the rest of its name',
-      grouped.length > 0 && grouped.every((g) => g.folder.endsWith('/') && g.rows.length > 1 && g.rows.every((r) => r.key === g.folder + r.name)),
-      JSON.stringify(grouped.slice(0, 2)),
+      'search results that share a folder sit in a box under it, each showing only the rest of its name, and no folder is shown twice',
+      grouped.length > 0 &&
+        grouped.every((g) => g.folder.endsWith('/') && g.rows.length + g.inner > 1 && g.rows.every((r) => r.key === g.folder + r.name)) &&
+        tops.every((a) => tops.every((b) => a === b || !b.startsWith(a))),
+      JSON.stringify(grouped.slice(0, 3)),
     );
     await page.screenshot({ path: resolve(outDir, 'ui-field-search-groups.png') });
     // click a value in the inspector to copy it

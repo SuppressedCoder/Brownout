@@ -21,7 +21,7 @@ import { useStore } from '../state/store';
 import { panelStore, addFieldToPanel, addFieldsToPanel, panelAccepts, panelTypeForField, PANEL_TITLES } from '../state/panels';
 import { profileStore, profileById, updateProfile } from '../state/profiles';
 import { grid } from './Grid';
-import { useFieldIndex, keyMatchesSearch, shortKey, typeLabels, completeType, typeMatches, typeLabel, groupByFolder, type MergedField } from '../lib/fields';
+import { useFieldIndex, keyMatchesSearch, shortKey, typeLabels, completeType, typeMatches, typeLabel, groupByFolder, splitKey, type MergedField } from '../lib/fields';
 import { setFieldDrag, type FieldDrag } from '../lib/dnd';
 import { client } from '../worker/client';
 import { useSeriesTick } from '../lib/useSeries';
@@ -29,6 +29,7 @@ import { indexAtOrBefore } from '@core/log';
 import { formatValue } from '../lib/format';
 import { toast } from '../state/ui';
 import { Icon } from './Icon';
+import { FolderGroups } from './FolderGroups';
 import { InPanels } from './InPanels';
 import { useFieldPanels, linkStore, pointAtField, panelColorVar, inPanelsStore } from '../lib/panelLinks';
 
@@ -188,7 +189,6 @@ export function Sidebar() {
     return out;
   }, [q, types, fields, showGenerated]);
 
-  // search results that share a folder: the folder once above them, each row only the part that differs
   const groups = useMemo(() => (flat ? groupByFolder(flat) : null), [flat]);
 
   const onSearchKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -390,25 +390,17 @@ export function Sidebar() {
           </div>
         )}
         {groups
-          ? groups.map((g) =>
-              g.fields.length > 1 ? (
-                <div className="search-group" key={`group:${g.folder}`} data-testid="search-group">
-                  <div
-                    className="search-folder"
-                    title={`${g.folder || '(top level)'}\nEvery field in this box is in this folder; each row shows the rest of its name.`}
-                  >
-                    <Icon name="folder" size={11} />
-                    <span className="path">
-                      <bdi>{g.folder || '(top level)'}</bdi>
-                    </span>
-                    <span className="count">{g.fields.length}</span>
-                  </div>
-                  {g.fields.map((f) => row(f, f.key.slice(g.folder.length), 0))}
-                </div>
-              ) : (
-                row(g.fields[0], g.fields[0].key.slice(g.folder.length), 0, '', g.folder)
-              ),
-            )
+          ? (
+            // results that share a folder: the folder once above them, each row only the part that differs (its own folder dimmed)
+            <FolderGroups
+              groups={groups}
+              testId="search-group"
+              row={(f, name) => {
+                const rest = splitKey(name);
+                return row(f, rest.leaf, 0, '', rest.folder || undefined);
+              }}
+            />
+          )
           : renderNode(tree, 0)}
         {flat && flat.length === 0 && <div className="hint">No matches.</div>}
       </div>

@@ -148,25 +148,7 @@ export function specReason(spec: FieldSpec, f: FieldLike): string {
   return `Takes ${specLabel(spec).replace(/ · /g, ', ')}; ${shortKey(f.key, 3)} is ${typeLabel(f)}`;
 }
 
-/** Search results in groups by the folder they are in (the key up to its last '/'), in the order they came. */
-export function groupByFolder<F extends { key: string }>(list: F[]): { folder: string; fields: F[] }[] {
-  const out = new Map<string, F[]>();
-  for (const f of list) {
-    const folder = f.key.slice(0, f.key.lastIndexOf('/') + 1);
-    const g = out.get(folder);
-    if (g) g.push(f);
-    else out.set(folder, [f]);
-  }
-  // numbers in names in their natural order: 0, 1, 2 ... 10, not 0, 1, 10, 11
-  const natural = (a: F, b: F) => a.key.localeCompare(b.key, undefined, { numeric: true });
-  return [...out.entries()].map(([folder, fields]) => ({ folder, fields: fields.sort(natural) }));
-}
-
-/** A key split for showing: the folder (dimmed) and the name. */
-export function splitKey(key: string): { folder: string; leaf: string } {
-  const i = key.lastIndexOf('/', key.length - 2);
-  return { folder: key.slice(0, i + 1), leaf: key.slice(i + 1) };
-}
+export { groupByFolder, groupFields, splitKey } from '@core/folders';
 
 /**
  * The field typed text could finish as, for Tab: a key that starts with it

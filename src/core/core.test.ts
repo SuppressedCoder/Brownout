@@ -1,3 +1,4 @@
+import { groupByFolder, groupFields, FOLDER_MERGE_MAX, type FolderGroup } from './folders';
 import { roleTypes, ROLE_GROUPS, ROLE_LABELS } from './roles';
 import { describe, it, expect } from 'vitest';
 import { WpilogWriter } from './wpilog/writer';
@@ -433,5 +434,51 @@ describe('role types (what a field box for a role takes)', () => {
     const all = ROLE_GROUPS.flatMap((g) => g.roles);
     expect(new Set(all).size).toBe(all.length);
     expect(all.length).toBe(Object.keys(ROLE_LABELS).length);
+  });
+});
+
+describe('groupByFolder', () => {
+  const k = (...keys: string[]) => keys.map((key) => ({ key }));
+  type G = FolderGroup<{ key: string }>;
+  // [folder as shown, names, inner groups]
+  const show = (gs: G[], parent = ''): unknown[] =>
+    gs.map((g) => [g.folder.slice(parent.length), g.fields.map((f) => f.key.slice(g.folder.length)), ...(g.groups.length ? [show(g.groups, g.folder)] : [])]);
+  it('puts fields of one folder together, in natural order', () => {
+    expect(show(groupByFolder(k('/A/x10', '/A/x2', '/B/y')))).toEqual([
+      ['/A/', ['x2', 'x10']],
+      ['/B/', ['y']],
+    ]);
+  });
+  it('merges short sibling folders into one list under the folder they share', () => {
+    const g = groupByFolder(k('/Real/Drive/Module10/Speed', '/Real/Drive/Module0/Speed', '/Real/Drive/Module1/Speed', '/Real/Drive/Gyro', '/Other/x'));
+    expect(show(g)).toEqual([
+      ['/Real/Drive/', ['Gyro', 'Module0/Speed', 'Module1/Speed', 'Module10/Speed']],
+      ['/Other/', ['x']],
+    ]);
+  });
+  it('merges level by level, but never into the top level', () => {
+    expect(show(groupByFolder(k('/Real/Arm/Volts', '/Real/Drive/A/Volts', '/Real/Drive/B/Volts', '/Log/x')))).toEqual([
+      ['/Real/', ['Arm/Volts', 'Drive/A/Volts', 'Drive/B/Volts']],
+      ['/Log/', ['x']],
+    ]);
+  });
+  it('nests big folders instead of repeating the folder they share', () => {
+    const many = (m: string) => Array.from({ length: FOLDER_MERGE_MAX }, (_, i) => `/R/${m}/f${i}`);
+    // a folder with its own fields holds the big one inside it
+    const ch = Array.from({ length: FOLDER_MERGE_MAX }, (_, i) => `/P/Channel/${i}`);
+    expect(show(groupByFolder(k('/P/Total', ...ch, '/P/Volts')))).toEqual([['/P/', ['Total', 'Volts'], [['Channel/', ch.map((x) => x.slice(11))]]]]);
+    // two big siblings: an empty box for the folder they share, around them
+    const two = groupByFolder(k(...many('A'), ...many('B'), '/Q/x'));
+    expect(two.map((g) => [g.folder, g.fields.length, g.groups.map((x) => x.folder)])).toEqual([
+      ['/R/', 0, ['/R/A/', '/R/B/']],
+      ['/Q/', 1, []],
+    ]);
+    expect(groupFields(two).map((f) => f.key)).toEqual([...many('A'), ...many('B'), '/Q/x']);
+  });
+  it('keeps the order they came in with sort: false', () => {
+    expect(show(groupByFolder(k('/D/M1/b', '/X/y', '/D/M0/a'), { sort: false }))).toEqual([
+      ['/D/', ['M1/b', 'M0/a']],
+      ['/X/', ['y']],
+    ]);
   });
 });

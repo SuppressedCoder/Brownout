@@ -903,6 +903,10 @@ h4 {
   border-radius: 4px;
   overflow: hidden;
 }
+.search-group .search-group {
+  /* a folder inside the box's folder */
+  margin: 2px 4px 4px 10px;
+}
 .search-folder {
   display: flex;
   align-items: center;
@@ -3065,6 +3069,10 @@ h4 {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.fsearch-name .fkey-leaf {
+  font-weight: inherit;
+  color: inherit;
+}
 
 /* several fields: chips with + Field at the end */
 .flist {
@@ -3274,6 +3282,9 @@ h4 {
   overflow-y: auto;
   padding: 2px 0 6px;
   scrollbar-width: thin;
+}
+.ip-body .search-group {
+  margin: 3px 4px;
 }
 .ip-row {
   padding: 3px 8px;

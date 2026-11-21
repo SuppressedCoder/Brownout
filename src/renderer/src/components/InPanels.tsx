@@ -16,7 +16,8 @@ import { panelStore, PANEL_TITLES, type PanelSettings } from '../state/panels';
 import { sessionStore, type LogEntry } from '../state/session';
 import { timeStore } from '../state/time';
 import { gridStore, linkStore, pointAtField, panelColorVar, shownKeys } from '../lib/panelLinks';
-import { useFieldIndex, keyMatchesSearch } from '../lib/fields';
+import { useFieldIndex, keyMatchesSearch, groupByFolder } from '../lib/fields';
+import { FolderGroups } from './FolderGroups';
 import { camerasFor } from '../lib/vision';
 import { client } from '../worker/client';
 import { indexAtOrBefore } from '@core/log';
@@ -119,7 +120,7 @@ function Swatch({ s, k, logs }: { s: PanelSettings; k: string; logs: LogEntry[] 
   return null;
 }
 
-function Row({ k, s, logs, unit }: { k: string; s: PanelSettings; logs: LogEntry[]; unit?: string }) {
+function Row({ k, name, s, logs, unit }: { k: string; name: string; s: PanelSettings; logs: LogEntry[]; unit?: string }) {
   const linked = useStore(linkStore, (x) => x.key === k);
   return (
     <div
@@ -131,7 +132,7 @@ function Row({ k, s, logs, unit }: { k: string; s: PanelSettings; logs: LogEntry
     >
       <div className="ip-key" title={k}>
         <Swatch s={s} k={k} logs={logs} />
-        <KeyText k={k} />
+        <KeyText k={name} />
       </div>
       <div className="ip-vals">
         {logs.map((l) => (
@@ -172,7 +173,17 @@ export function InPanels({ q }: { q: string }) {
               <span className="ip-title">{title}</span>
             </div>
             <div className="ip-body">
-              {s && keys.map((k) => <Row key={k} k={k} s={s} logs={logs} unit={fields.get(k)?.unit} />)}
+              {/* fields that share a folder sit in a box under it, in the panel's order */}
+              {s && (
+                <FolderGroups
+                  groups={groupByFolder(
+                    keys.map((key) => ({ key })),
+                    { sort: false },
+                  )}
+                  testId="ip-group"
+                  row={({ key }, name) => <Row k={key} name={name} s={s} logs={logs} unit={fields.get(key)?.unit} />}
+                />
+              )}
               {s && !keys.length && <div className="hint">{q ? 'No matches.' : 'No fields.'}</div>}
             </div>
           </section>

@@ -27,6 +27,7 @@ import {
   useFieldIndex,
   keyMatchesSearch,
   groupByFolder,
+  groupFields,
   completeKey,
   specAccepts,
   specLabel,
@@ -38,6 +39,7 @@ import {
   type MergedField,
 } from '../lib/fields';
 import { Icon } from './Icon';
+import { FolderGroups } from './FolderGroups';
 import { linkStore, pointAtField } from '../lib/panelLinks';
 
 const LIST_MAX = 300;
@@ -295,7 +297,7 @@ function FieldSearchInput({
     }
     return groupByFolder(out);
   }, [all, q, spec]); // eslint-disable-line react-hooks/exhaustive-deps
-  const flat = useMemo(() => groups.flatMap((g) => g.fields), [groups]);
+  const flat = useMemo(() => groupFields(groups), [groups]);
   const cur = flat[Math.min(hl, flat.length - 1)];
 
   // keep the highlighted row in view
@@ -370,37 +372,31 @@ function FieldSearchInput({
         aria-label="Field"
       />
       <FloatingList anchor={anchor} listRef={listRef}>
-        {groups.map((g) => (
-          <div className="search-group" key={g.folder}>
-            <div className="search-folder">
-              <span className="path">
-                <bdi>{g.folder || '/'}</bdi>
+        <FolderGroups
+          groups={groups}
+          row={(f, name) => (
+            <div
+              className={`fsearch-row${f === cur ? ' hl' : ''}`}
+              onMouseDown={(e) => e.preventDefault()}
+              onMouseEnter={() => setHl(flat.indexOf(f))}
+              onClick={() => onPick(f)}
+              title={f.key}
+              data-testid="fsearch-row"
+            >
+              <span className="fsearch-name">
+                <KeyText k={name} />
               </span>
-              <span className="count">{g.fields.length}</span>
+              <span className="kind-badge">{typeLabel(f)}</span>
+              {logs.length > 1 && (
+                <span className="log-dots">
+                  {logs.map((l) => (
+                    <span key={l.id} className="dot" style={{ background: f.logIds.includes(l.id) ? l.color : 'transparent', borderColor: l.color }} />
+                  ))}
+                </span>
+              )}
             </div>
-            {g.fields.map((f) => (
-              <div
-                key={f.key}
-                className={`fsearch-row${f === cur ? ' hl' : ''}`}
-                onMouseDown={(e) => e.preventDefault()}
-                onMouseEnter={() => setHl(flat.indexOf(f))}
-                onClick={() => onPick(f)}
-                title={f.key}
-                data-testid="fsearch-row"
-              >
-                <span className="fsearch-name">{f.key.slice(g.folder.length)}</span>
-                <span className="kind-badge">{typeLabel(f)}</span>
-                {logs.length > 1 && (
-                  <span className="log-dots">
-                    {logs.map((l) => (
-                      <span key={l.id} className="dot" style={{ background: f.logIds.includes(l.id) ? l.color : 'transparent', borderColor: l.color }} />
-                    ))}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        ))}
+          )}
+        />
         {!flat.length && <div className="hint">{logs.length ? 'No fields fit.' : 'No logs open.'}</div>}
       </FloatingList>
     </span>

@@ -197,7 +197,7 @@ The timeline is the only thing that moves time: the cursor, the visible range an
 
 ## 6. The field list (sidebar)
 
-- **Search:** words narrow by name (every word must appear). Results that sit in the same folder are boxed together under that folder, shown once, and each row shows only the rest of its name: the part that tells them apart. A result alone in its folder shows the folder dimmed in front of its name.
+- **Search:** words narrow by name (every word must appear). Results that sit in the same folder are boxed together under that folder, shown once, and each row shows only the rest of its name: the part that tells them apart. No folder is shown twice: results in neighboring folders (`Drive/Module0/Speed`, `Drive/Module1/Speed`) share one box under the folder they have in common (`Drive/`), each row with its own folder dimmed; a folder with many results gets its own box inside the shared one, headed by only the rest of its name (`ChannelCurrent/` inside `/PowerDistribution/`). A result alone in its folder shows the folder dimmed in front of its name. The lists under field boxes and the In panels sections group the same way (In panels keeps each panel's order).
 - **Filter by type, by typing:** start typing a type that exists in your logs (`Pose2d`, `boolean`, `number`, `SwerveModuleState[]`, ...). The rest of it shows faintly with a **Tab** hint. Press **Tab** and it becomes a type chip, then keep typing:
   - more types (Tab again) list fields of **any** of them;
   - words narrow by name;
