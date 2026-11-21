@@ -128,7 +128,7 @@ From left to right:
   - **the close button** closes it;
   - **hover** for the file name, size and alignment offset.
 - **Close all**, next to the log chips when two or more logs are open, closes every log at once (also in the File menu).
-- **View switch: Panels, Video, Power** (Ctrl+1, Ctrl+2, Ctrl+3). See section 9.
+- **View switch: Panels, Video, Power, Robot** (Ctrl+1, Ctrl+2, Ctrl+3, Ctrl+4). See section 9; Robot setup is section 12.
 - **Align:** how logs are lined up (section 4).
 - **Preset menu** and **Add panel** (only in the Panels view, section 7).
 - **Potato mode**, **Settings** (Ctrl+,), and the **help** button: this guide and the shortcuts and tips (?, or F1 for the guide).
@@ -375,7 +375,7 @@ Any panel that lacks what it needs says so and how to log it, and Log info & hea
   - **logging health:** every signal Brownout recommends, with a check or a cross, why it matters and how to log it;
   - **Field names:** which field Brownout uses for each role (battery voltage, robot pose, swerve states, ...). Pick a different one if it guessed wrong; it is saved in the robot profile for every log from that robot.
 
-## 9. The views (header switch, or Ctrl+1, 2, 3)
+## 9. The views (header switch, or Ctrl+1, 2, 3, 4)
 
 **Panels** (Ctrl+1): your grid of panels and presets. It stays as you left it while you are in the other views.
 
@@ -401,12 +401,14 @@ Any panel that lacks what it needs says so and how to log it, and Log info & hea
 
 **Power** (Ctrl+3, P, or the Power button): the battery and current graph across the top, the power report below it. Walkthrough: section 2.1.
 
+**Robot setup** (Ctrl+4, or the Robot button): the field with the field list beside it, to drag fields onto the field and say what they are, and the whole robot profile in tabs. Section 12.
+
 Preset and Add panel only show in the Panels view. The views' own panels are never saved into your layouts or presets.
 
 **Several windows** (Ctrl+Shift+N, the Window menu (press Alt), or just start Brownout again): another window on the same logs and the same time, for a second monitor. Put Video review in one and your graphs in the other.
 
 - **Shared by all windows:** the open logs, their order, colors, offsets and hidden/shown state, the alignment mode, match or whole log, bookmarks, and time: the cursor, the zoom, the selection and playback. Open, close or line up a log in any window and the others do the same; press Play or Pause in any window.
-- **Each window's own:** its view (Panels, Video review, Power), its panels and layout, the sidebar and the timeline height. The window title names its view, and the **Window** menu (press Alt) lists the windows to switch between.
+- **Each window's own:** its view (Panels, Video review, Power, Robot setup), its panels and layout, the sidebar and the timeline height. The window title names its view, and the **Window** menu (press Alt) lists the windows to switch between.
 - Playback keeps time even when the window you pressed Play in is minimized.
 - Only the first window saves the layout and the session. A later window starts from the saved layout, and what you change in it lasts until you close it. When the first window closes, the next one takes over saving.
 - Settings, presets, robot profiles and video syncs changed in one window reach the others.
@@ -416,7 +418,7 @@ Preset and Add panel only show in the Panels view. The views' own panels are nev
 ## 10. Things Brownout works out for you
 
 - **Robot state and match info** (enabled, auto, teleop, event, match number, alliance) from whichever logger wrote the file: AdvantageKit, DataLogManager, the 2027 Driver Station.
-- **Fields by role:** battery voltage, total current, PDH channels, robot pose, swerve states, chassis speeds, the active path and target, loop time, CAN use and more. A wrong guess is corrected once in Log info & health, Field names (or Settings, Robot) and remembered for that robot.
+- **Fields by role:** battery voltage, total current, PDH channels, robot pose, swerve states, chassis speeds, the active path and target, loop time, CAN use and more. A wrong guess is corrected once (drop the right field on the field in Robot setup, or Log info & health, or Robot setup, Field names) and remembered for that robot.
 - **Cameras** from field names (AdvantageKit's vision template, Limelight `botpose` arrays). Each camera gets fields for the tags it sees, how many, and its estimate error (`/Brownout/Vision/<camera>/...`).
 - **Commands, the controller, PathPlanner paths and the auto routine**, from their usual field names.
 - **Events:** brownouts, program restarts (not the normal start-up), loop overruns (naming the slowest part), errors, warnings (repeats grouped), alerts, connection losses.
@@ -468,12 +470,37 @@ Preset and Add panel only show in the Panels view. The views' own panels are nev
 - dragging the timeline keeps the picture moving. With phone video (few keyframes) it updates several times a second rather than every frame;
 - the panel says when the video starts after, or ended before, the current moment.
 
-## 12. The robot profile (Settings, Robot)
+## 12. Robot setup (header: Robot, Ctrl+4)
 
-A preset says where panels go; a **robot profile** describes the robot and applies to every log from it:
+A preset says where panels go; a **robot profile** describes the robot and applies to every log from it. **Robot setup** is the one place for it, built around the field (Settings has no Robot tab):
 
-- **which profile:** chosen per log (remembered per file), else the best match of field names, else the last one used. Several profiles are fine (a practice robot);
-- **size** with bumpers (no upper limit), **swerve module order and full-scale speed**, **controller layout**, **favorite fields**, **field-name corrections**;
+```
++-----------+----------------------------------+----------------------+
+| field     |   the 2D field                   | profile: My robot    |
+| list      |     [robot] ---- tag 12          | On the field | Robot |
+| (drag     |                                  | Cameras | Power ...  |
+|  from     |   drop a field here: what is it? | Robot pose (found by |
+|  here)    |                                  |  name) ...           |
++-----------+----------------------------------+----------------------+
+| timeline                                                            |
++---------------------------------------------------------------------+
+```
+
+- **Drag a field onto the field** and a menu at the drop point asks what it is. It offers only what that kind of field can be:
+  - a position (Pose2d, Pose3d, a pose array): **the robot's position**, **where a camera thinks the robot is** (one of the cameras, or a new one), **where the path wants the robot to be**, or the **vision estimate** of all cameras together;
+  - a list of poses: **the path being followed**, **the tags a camera sees** (their positions), or a camera's estimate;
+  - a list of numbers: **the IDs of the tags a camera sees**. A Limelight `botpose` array sets a camera's estimate and its tags at once;
+  - a number (an angle): **turns a part of the robot** (one of the parts, or a new bar at the center); radians, degrees or rotations are guessed from the name;
+  - swerve module states (measured or setpoints) and chassis speeds.
+  The answer goes into the profile, so every log from this robot follows, and the field shows it at once. The first camera you drop keeps the cameras Brownout found by name.
+- **On the field** (tab): what the field shows and where each piece comes from, **found by name** or **set here**; Clear goes back to finding it by name. The cameras with their fields, and the parts that turn.
+- **Profile** (top): which profile is shown; its menu makes a new one, duplicates, renames, exports, imports or deletes. It says which open logs use it, and warns when the profile names fields the open logs do not have.
+- **Robot** (tab): **size** with bumpers (no upper limit), **Edit the parts** (the robot editor, below), **swerve module order and full-scale speed**;
+- **Cameras** (tab): the camera editor, below;
+- **Power** (tab): the power subsystems, below;
+- **Field names** (tab): every field picked by hand instead of by name, with Pick again and Clear;
+- **Logs** (tab): which profile each open log uses (chosen per log and remembered per file; otherwise the best match of field names, else the last one used; several profiles are fine, for a practice robot), and the **favorite fields**;
+- the **controller layout** is set in the Controller panel;
 - **power subsystems** (subsystem editor):
   - **Suggest** groups motor currents by folder (`Subsystems/Elevator/...` becomes Elevator), preferring supply over stator current;
   - assign PDH or PDP channels (each shows its peak current) or logged current fields;
@@ -487,7 +514,7 @@ A preset says where panels go; a **robot profile** describes the robot and appli
   - **attached to another part:** the part moves with that part's turn, and its own angle adds on top (a wrist on an arm, a claw on a turret);
   - **the test angle** slider previews every linked part turning;
   - **the preview's view is yours:** the wheel zooms around the pointer, dragging empty space (or the middle button anywhere) moves the view, and it is not held to the robot. It fits the robot when the editor opens; **Fit** or a double-click on empty space fits it again. It never refits while you drag a part;
-  - **Undo and Redo** buttons in its header, and Ctrl+Z / Ctrl+Shift+Z, take back part changes (also when the editor was opened from Settings);
+  - **Undo and Redo** buttons in its header, and Ctrl+Z / Ctrl+Shift+Z, take back part changes ;
 - **export and import** a profile as one file, pictures included, to share a setup with the team.
 
 ## 13. Reports and exports
@@ -543,7 +570,7 @@ A preset says where panels go; a **robot profile** describes the robot and appli
 | Ctrl+B | Show / hide the field sidebar |
 | Ctrl+T | Cycle the timeline height |
 | Ctrl+Enter | Maximize / restore the active panel |
-| Ctrl+1 / Ctrl+2 / Ctrl+3 | Panels / Video review / Power view |
+| Ctrl+1 / Ctrl+2 / Ctrl+3 / Ctrl+4 | Panels / Video review / Power / Robot setup |
 | P | Power view |
 | Ctrl+Shift+P | Potato mode |
 | Ctrl+Shift+N | New window on the same logs and time |

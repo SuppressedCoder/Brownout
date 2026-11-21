@@ -163,6 +163,16 @@ export function Header() {
           >
             <span className="hdr-text">Power</span>
           </ToolButton>
+          <ToolButton
+            icon="robot"
+            text="Robot setup"
+            active={view === 'robot'}
+            onClick={() => showView('robot')}
+            title={`Robot setup: drag fields onto the field to say what they are (robot, cameras, path, turning parts); size, parts, power and the rest of the robot profile (${keyHint('viewRobot')})`}
+            testId="view-robot"
+          >
+            <span className="hdr-text">Robot</span>
+          </ToolButton>
         </ToolGroup>
         <ToolGroup low className="hdr-label">
           Align

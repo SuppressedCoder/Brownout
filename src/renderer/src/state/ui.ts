@@ -47,7 +47,7 @@ export interface Toast {
   actions?: { label: string; run: () => void }[];
 }
 
-export type SettingsTab = 'general' | 'appearance' | 'robot' | 'keybinds' | 'demo';
+export type SettingsTab = 'general' | 'appearance' | 'keybinds' | 'demo';
 
 export interface UiState {
   dialogs: Dialog[];
@@ -68,6 +68,9 @@ export interface UiState {
   camerasFor: string | null;
   /** The robot appearance editor is open, for this robot profile id. */
   robotEditorFor: string | null;
+  /** Robot setup: the profile it shows (null: the one the first log uses) and its open tab. */
+  setupProfile: string | null;
+  setupTab: 'field' | 'robot' | 'cameras' | 'power' | 'names' | 'logs';
   /** The video sync view is open, for this log id. */
   videoSyncFor: string | null;
 }
@@ -85,6 +88,8 @@ export const uiStore = createStore<UiState>({
   subsystemsFor: null,
   camerasFor: null,
   robotEditorFor: null,
+  setupProfile: null,
+  setupTab: 'field',
   videoSyncFor: null,
 });
 

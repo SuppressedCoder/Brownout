@@ -1,8 +1,9 @@
 /**
- * Settings, Robot: the robot profile. One page for everything that
- * describes the robot rather than the screen: which profile each open log
- * uses, robot size, power subsystems, swerve settings, field-name
- * corrections and favorites, with export / import as one file.
+ * The parts of Robot setup (components/RobotSetup.tsx) that edit the robot
+ * profile: the profile bar (switch, new, duplicate, rename, export, import,
+ * delete), the robot (size, appearance, swerve), field names, and which
+ * profile each open log uses with the favorites. Cameras and power
+ * subsystems have their own editors (CameraEditor, SubsystemEditor).
  */
 import { useState } from 'react';
 import { NumberInput } from './NumberInput';
@@ -20,13 +21,12 @@ import {
   type RobotProfile,
   type SwerveOrder,
 } from '../state/profiles';
-import { sessionStore, assignProfile, setProfileRole, activeProfileId } from '../state/session';
+import { sessionStore, assignProfile, setProfileRole, type LogEntry } from '../state/session';
 import { useStore } from '../state/store';
 import { askText, confirmDialog, toast, uiStore } from '../state/ui';
+import { MenuButton, MenuItem, MenuSeparator } from './Menu';
 import { saveText, pickJson } from '../lib/persist';
 import { ROLE_LABELS, type Role } from '@core/roles';
-import { SubsystemEditor } from './SubsystemEditor';
-import { CameraEditor } from './CameraEditor';
 import { FieldPicker } from './FieldPicker';
 import { Icon } from './Icon';
 import { shortKey } from '../lib/fields';
@@ -66,15 +66,18 @@ export async function importProfile(): Promise<RobotProfile | null> {
   }
 }
 
-export function RobotSettings() {
+/** Fields this profile names (overrides, favorites, cameras, part links) that the open logs using it do not have. */
+export function missingKeys(profile: RobotProfile, logs: LogEntry[]): string[] {
+  const mine = logs.filter((l) => l.profileId === profile.id);
+  return mine.length ? profileKeys(profile).filter((k) => !mine.some((l) => l.fields.some((f) => f.key === k))) : [];
+}
+
+/** Which profile Robot setup shows, and everything done to profiles as a whole. */
+export function ProfileBar({ profile, onProfile }: { profile: RobotProfile; onProfile: (id: string) => void }) {
   const state = useStore(profileStore, (s) => s);
   const logs = useStore(sessionStore, (s) => s.logs);
-  const [viewId, setViewId] = useState<string>(() => activeProfileId());
-  const [pickRole, setPickRole] = useState<Role | null>(null);
-  const profile = state.profiles.find((p) => p.id === viewId) ?? state.profiles[0];
   const mine = logs.filter((l) => l.profileId === profile.id);
-  const missing = mine.length ? profileKeys(profile).filter((k) => !mine.some((l) => l.fields.some((f) => f.key === k))) : [];
-  const isMissing = (k: string) => missing.includes(k);
+  const missing = missingKeys(profile, logs);
 
   const create = async (from?: RobotProfile) => {
     const name = await askText({
@@ -87,7 +90,7 @@ export function RobotSettings() {
     });
     if (name === null) return;
     const p = addProfile({ ...(from ?? blankProfile(name.trim())), name: name.trim() });
-    setViewId(p.id);
+    onProfile(p.id);
   };
   const rename = async () => {
     const name = await askText({
@@ -103,7 +106,7 @@ export function RobotSettings() {
     if (
       !(await confirmDialog(
         `Delete “${profile.name}”?`,
-        'Its subsystems, favorites and field-name corrections are deleted. Logs that used it switch to another profile.',
+        'Its subsystems, cameras, parts, favorites and field-name corrections are deleted. Logs that used it switch to another profile.',
         'Delete',
         true,
       ))
@@ -112,25 +115,18 @@ export function RobotSettings() {
     const next = state.profiles.find((p) => p.id !== profile.id)!;
     for (const l of mine) await assignProfile(l.id, next.id);
     removeProfile(profile.id);
-    setViewId(next.id);
-  };
-  const size = (key: 'length' | 'width', v: number | null) => {
-    if (v !== null && v > 0.01) updateProfile(profile.id, { robot: { ...profile.robot, [key]: v } });
+    onProfile(next.id);
   };
 
   return (
-    <div data-testid="robot-settings">
-      <p className="setting-text">
-        A preset says where the panels go. A robot profile describes the robot and applies whichever preset or log is open. It is saved on this computer; export
-        it to share one setup with your team.
-      </p>
+    <div className="setup-profile" data-testid="robot-settings">
       <div className="profile-bar">
         <select
           className="tool-select"
           value={profile.id}
-          onChange={(e) => setViewId(e.target.value)}
+          onChange={(e) => onProfile(e.target.value)}
           data-testid="profile-select"
-          title="The robot profile shown below"
+          title="The robot profile shown here"
         >
           {state.profiles.map((p) => (
             <option key={p.id} value={p.id}>
@@ -138,58 +134,53 @@ export function RobotSettings() {
             </option>
           ))}
         </select>
-        <button className="btn" onClick={() => void create()} data-testid="profile-new">
-          New
-        </button>
-        <button className="btn" onClick={() => void create(profile)}>
-          Duplicate
-        </button>
-        <button className="btn" onClick={() => void rename()}>
-          Rename
-        </button>
-        <button className="btn" onClick={() => void exportProfile(profile)} data-testid="profile-export">
-          Export
-        </button>
-        <button className="btn" onClick={() => void importProfile().then((p) => p && setViewId(p.id))} data-testid="profile-import">
-          Import
-        </button>
-        <button className="btn danger" disabled={state.profiles.length <= 1} onClick={() => void remove()}>
-          Delete
-        </button>
+        <MenuButton label={<span>Profile</span>} title="New, duplicate, rename, export, import or delete robot profiles" testId="profile-menu">
+          {(close) => (
+            <>
+              <MenuItem icon="plus" label="New profile…" onClick={() => (close(), void create())} testId="profile-new" />
+              <MenuItem label="Duplicate…" onClick={() => (close(), void create(profile))} />
+              <MenuItem label="Rename…" onClick={() => (close(), void rename())} />
+              <MenuSeparator />
+              <MenuItem
+                icon="download"
+                label="Export…"
+                description="The whole profile as one file, pictures included, to share with the team"
+                onClick={() => (close(), void exportProfile(profile))}
+                testId="profile-export"
+              />
+              <MenuItem
+                icon="upload"
+                label="Import…"
+                onClick={() => (close(), void importProfile().then((p) => p && onProfile(p.id)))}
+                testId="profile-import"
+              />
+              <MenuSeparator />
+              <MenuItem icon="close" label="Delete…" danger disabled={state.profiles.length <= 1} onClick={() => (close(), void remove())} />
+            </>
+          )}
+        </MenuButton>
       </div>
-
+      <div className="setting-help">
+        {mine.length ? `Used by ${mine.map((l) => l.name).join(', ')}.` : 'No open log uses this profile.'} Saved on this computer; export it to share it.
+      </div>
       {missing.length > 0 && (
         <div className="keybind-note" data-testid="profile-missing">
           <Icon name="warning" size={12} /> {missing.length} field{missing.length === 1 ? '' : 's'} in this profile {missing.length === 1 ? 'is' : 'are'} not in
-          the open logs (marked below). If the robot code renamed them, pick the new names.
+          the open logs. If the robot code renamed them, drop the new ones on the field or pick them again.
         </div>
       )}
+    </div>
+  );
+}
 
-      <h3>Open logs</h3>
-      {logs.length === 0 && <div className="setting-help">No logs open. New logs use the profile whose field names fit best, or the last one you used.</div>}
-      {logs.map((l) => (
-        <div className="setting-row plain" key={l.id}>
-          <span>
-            <span className="setting-label" style={{ color: l.color }}>
-              {l.name}
-            </span>
-          </span>
-          <select
-            className="tool-select"
-            value={l.profileId}
-            onChange={(e) => void assignProfile(l.id, e.target.value)}
-            title="Robot profile for this log (remembered for this file)"
-          >
-            {state.profiles.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      ))}
-
-      <h3>Robot size</h3>
+/** The robot itself: size, the parts drawn on it, and its swerve drive. */
+export function RobotSection({ profile }: { profile: RobotProfile }) {
+  const size = (key: 'length' | 'width', v: number | null) => {
+    if (v !== null && v > 0.01) updateProfile(profile.id, { robot: { ...profile.robot, [key]: v } });
+  };
+  return (
+    <div>
+      <h3>Size</h3>
       <div className="setting-row plain">
         <span>
           <span className="setting-label">Length and width with bumpers</span>
@@ -217,26 +208,21 @@ export function RobotSettings() {
         </span>
       </div>
 
+      <h3>Appearance</h3>
       <div className="setting-row plain">
         <span>
-          <span className="setting-label">Robot appearance</span>
+          <span className="setting-label">Parts drawn on the robot</span>
           <span className="setting-help">
             {profile.layers.length === 0
               ? 'The robot is drawn as a plain box.'
-              : `${profile.layers.length} part${profile.layers.length === 1 ? '' : 's'} drawn on the robot${profile.layers.some((l) => l.link) ? ', some turning with logged angles' : ''}.`}{' '}
-            Add shapes, pictures or SVGs, and link parts to logged angles.
+              : `${profile.layers.length} part${profile.layers.length === 1 ? '' : 's'}${profile.layers.some((l) => l.link) ? ', some turning with logged angles' : ''}.`}{' '}
+            Shapes, pictures or SVGs. Drop an angle field on the field to make a part turn with it.
           </span>
         </span>
         <button className="btn" onClick={() => uiStore.set({ robotEditorFor: profile.id })} data-testid="edit-robot">
-          <Icon name="robot" size={13} /> Edit the robot
+          <Icon name="robot" size={13} /> Edit the parts
         </button>
       </div>
-
-      <h3>Power subsystems</h3>
-      <SubsystemEditor profileId={profile.id} />
-
-      <h3>Cameras</h3>
-      <CameraEditor profileId={profile.id} />
 
       <h3>Swerve</h3>
       <div className="setting-row plain">
@@ -272,11 +258,21 @@ export function RobotSettings() {
           m/s
         </span>
       </div>
+    </div>
+  );
+}
 
-      <h3>Field names</h3>
+/** The fields Brownout found by name, corrected by hand. */
+export function NamesSection({ profile }: { profile: RobotProfile }) {
+  const logs = useStore(sessionStore, (s) => s.logs);
+  const [pickRole, setPickRole] = useState<Role | null>(null);
+  const missing = missingKeys(profile, logs);
+  const isMissing = (k: string) => missing.includes(k);
+  return (
+    <div>
       <div className="setting-help">
-        Brownout finds battery voltage, robot pose and the like by name. When it picks the wrong field, correct it here (or in Log info &amp; health) and every
-        log from this robot follows.
+        Brownout finds battery voltage, robot pose and the like by name. When it picks the wrong field, correct it here (or drop the right one on the field) and
+        every log from this robot follows.
       </div>
       {Object.entries(profile.roleOverrides).length === 0 && <div className="setting-help">No corrections. Everything is found automatically.</div>}
       {(Object.entries(profile.roleOverrides) as [Role, string][]).map(([role, key]) => (
@@ -294,6 +290,48 @@ export function RobotSettings() {
           <button className="btn small" onClick={() => void setProfileRole(profile.id, role, undefined)} title="Go back to finding this field automatically">
             Clear
           </button>
+        </div>
+      ))}
+      {pickRole && (
+        <FieldPicker
+          title={`Field for: ${ROLE_LABELS[pickRole]}`}
+          onClose={() => setPickRole(null)}
+          onPick={(key) => void setProfileRole(profile.id, pickRole, key)}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Which profile each open log uses, and the favorite fields. */
+export function LogsSection({ profile }: { profile: RobotProfile }) {
+  const state = useStore(profileStore, (s) => s);
+  const logs = useStore(sessionStore, (s) => s.logs);
+  const missing = missingKeys(profile, logs);
+  const isMissing = (k: string) => missing.includes(k);
+  return (
+    <div>
+      <h3>Open logs</h3>
+      {logs.length === 0 && <div className="setting-help">No logs open. New logs use the profile whose field names fit best, or the last one you used.</div>}
+      {logs.map((l) => (
+        <div className="setting-row plain" key={l.id}>
+          <span>
+            <span className="setting-label" style={{ color: l.color }}>
+              {l.name}
+            </span>
+          </span>
+          <select
+            className="tool-select"
+            value={l.profileId}
+            onChange={(e) => void assignProfile(l.id, e.target.value)}
+            title="Robot profile for this log (remembered for this file)"
+          >
+            {state.profiles.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
         </div>
       ))}
 
@@ -316,13 +354,6 @@ export function RobotSettings() {
             </span>
           ))}
         </div>
-      )}
-      {pickRole && (
-        <FieldPicker
-          title={`Field for: ${ROLE_LABELS[pickRole]}`}
-          onClose={() => setPickRole(null)}
-          onPick={(key) => void setProfileRole(profile.id, pickRole, key)}
-        />
       )}
     </div>
   );

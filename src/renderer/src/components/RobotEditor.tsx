@@ -105,7 +105,7 @@ function hit(l: Layer, layers: Layer[], x: number, y: number, preview: number): 
   return Math.abs(p.x) <= hx && Math.abs(p.y) <= hy;
 }
 
-function guessUnit(key: string): 'rad' | 'deg' | 'rot' {
+export function guessUnit(key: string): 'rad' | 'deg' | 'rot' {
   if (/deg/i.test(key)) return 'deg';
   if (/rotations?$|rots?$|turns?$/i.test(key)) return 'rot';
   return 'rad';
@@ -834,7 +834,7 @@ function UndoButtons() {
   );
 }
 
-/** The editor as a dialog (opened from Settings → Robot and the 2D field's Display menu). */
+/** The editor as a dialog (opened from Robot setup, Robot and the 2D field's Display menu). */
 export function RobotEditorModal() {
   const profileId = useStore(uiStore, (s) => s.robotEditorFor);
   const profile = useStore(profileStore, (s) => s.profiles).find((p) => p.id === profileId);
