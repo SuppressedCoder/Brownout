@@ -92,6 +92,7 @@ export const ICONS = {
   video: { stroke: ['M2 4.2h8.4v7.6H2zM10.4 7l3.6-2v6l-3.6-2'] },
   frameBack: { stroke: ['M9.8 4 5.8 8l4 4M3.5 4v8'] },
   frameForward: { stroke: ['M6.2 4l4 4-4 4M12.5 4v8'] },
+  camera: { stroke: ['M2 5.4h2.9l1.2-1.8h3.8l1.2 1.8H14v7.2H2z', circle(8, 9, 2.3)] },
   target: { stroke: [circle(8, 8, 4.6), 'M8 1.4v3M8 11.6v3M1.4 8h3M11.6 8h3'] },
   maximize: { stroke: ['M2.5 6.2V2.5h3.7M9.8 2.5h3.7v3.7M13.5 9.8v3.7H9.8M6.2 13.5H2.5V9.8'] },
   restore: { stroke: ['M6.2 2.5v3.7H2.5M9.8 2.5v3.7h3.7M13.5 9.8H9.8v3.7M2.5 9.8h3.7v3.7'] },

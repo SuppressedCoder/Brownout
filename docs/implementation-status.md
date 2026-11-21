@@ -36,6 +36,8 @@ What the app in this repository does today, mapped to the specs. ✓ built · �
 | Multi-log session: colors, show/hide, primary log, close | ✓ | |
 | Header: sidebar toggle (left), File menu, log chips, Align, Preset menu, Add panel menu, Power button, Potato toggle, Settings, Help; one row, labels drop to icons and less-used controls move to an overflow menu when narrow | ✓ | |
 | Field search by type: typing the start of a type that exists in the open logs shows the rest faintly; Tab turns it into a type chip and typing goes on; several types list any of them, words narrow by name; Backspace on an empty search removes the last type, Escape clears; the sidebar's right edge drags to any width (remembered, double-click for the default) | ✓ | `typeLabels` / `completeType` / `typeMatches` in `lib/fields.ts` |
+| Field slots: one box for every field choice (drop from the field list, or type with Tab completion and a list of the fields that fit); boxes, chip lists, panels and the timeline light up while a field they can take is dragged; a box that can't take one turns red, says why and shakes; yellow outline for a field not in the open logs; the field picker window is gone | ✓ | `components/FieldSlot.tsx`, `dragStore` in `lib/dnd.ts`, `FieldSpec` in `lib/fields.ts` |
+| Panel field strips (chips with line and axis, + Field; drop on a chip swaps it, beside it inserts), panel numbers and colors in tabs and the field list, hover linking both ways (graph line drawn bolder), graph axis halves while dragging, In panels (one section per grid area, values at the cursor) | ✓ | `components/FieldStrip.tsx`, `lib/panelLinks.ts`, `components/InPanels.tsx`, `AxisDrop` in `GraphPanel.tsx` |
 | Field tree: search, type/unit badges, per-log dots, generated toggle, double-click, add-to-timeline; Ctrl / Shift multi-select, drag the selection or a whole folder (panels report what they skipped); favorites saved in the robot profile | ✓ | |
 | Inspector (values at cursor per log) | ✓ | |
 | Timeline: overview + window, mode lanes per log, Alt-drag to nudge, events, battery strip, user tracks (boolean/state/numeric), tags-seen track per camera, bookmarks, compact/standard/expanded, draggable height | ✓ | drag-to-reorder tracks ✗; findings track ✗ |
@@ -80,7 +82,7 @@ What the app in this repository does today, mapped to the specs. ✓ built · �
 | CSV export (selection or visible range) | ✓ | SVG export ✗ |
 | Browser build (`npm run web`) | ✓ | |
 | The guide inside the app: `docs/features.md` bundled with the build (`@docs` alias), read by `core/markdown.ts` into a tree drawn as React elements (no HTML from the file); Guide tab of the help sheet with contents and search; F1; panels missing data link to their section (`GuideLink`, `openGuide`) | ✓ | unit tests read the real file, so a guide edit the reader cannot handle fails `npm run check` |
-| UI test driving the real app (`npm run uitest`, 288 checks) | ✓ | passes on Linux (CI) and on Windows 11 |
+| UI test driving the real app (`npm run uitest`, 293 checks) | ✓ | passes on Linux (CI) and on Windows 11 |
 | Real-log check (`npm run reallog`): opens logs from `fixtures/local/`, sets up suggested subsystems, applies every preset, captures the camera view and the match report, writes a summary | ✓ | it checks nothing by itself; read `smoke/real-summary.json` and the screenshots |
 | Mechanism (side view), XY plot, 3D field | ✗ | |
 | Robot FTP download, DS folder watching, library | ✗ | P1 |

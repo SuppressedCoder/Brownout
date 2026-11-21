@@ -215,6 +215,7 @@ function buildMenu() {
         { label: 'Panels', click: action('viewPanels') },
         { label: 'Video review', click: action('viewVideo') },
         { label: 'Power', click: action('viewPower') },
+        { label: 'Robot setup', click: action('viewRobot') },
         { type: 'separator' },
         { label: 'Maximize / restore the active panel', click: action('maximizePanel') },
         { label: 'Toggle sidebar', click: action('toggleSidebar') },
@@ -252,7 +253,7 @@ function buildMenu() {
       label: 'Robot',
       submenu: [
         { label: 'Power by subsystem', click: action('power') },
-        { label: 'Robot profile…', click: action('robot') },
+        { label: 'Robot setup', click: action('robot') },
       ],
     },
     {

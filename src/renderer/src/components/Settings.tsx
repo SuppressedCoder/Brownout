@@ -14,14 +14,12 @@ import { loadDemo } from '../lib/files';
 import { pickJson } from '../lib/persist';
 import { parseFieldJson } from '@core/field';
 import { MODE_LABEL } from '../lib/colors';
-import { RobotSettings } from './RobotSettings';
 import { hasTagVariants, bundledTags } from '../lib/fieldAssets';
 import { Icon } from './Icon';
 
 const TABS: [SettingsTab, string][] = [
   ['general', 'General'],
   ['appearance', 'Appearance'],
-  ['robot', 'Robot'],
   ['keybinds', 'Keybinds'],
   ['demo', 'Demo logs'],
 ];
@@ -57,7 +55,6 @@ export function SettingsModal() {
           <div className="settings-page scroll">
             {tab === 'general' && <General />}
             {tab === 'appearance' && <Appearance />}
-            {tab === 'robot' && <RobotSettings />}
             {tab === 'keybinds' && <Keybinds />}
             {tab === 'demo' && <Demo onLoaded={close} />}
           </div>

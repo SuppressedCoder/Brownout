@@ -172,7 +172,7 @@ export function PowerPanel({ id }: { id: string }) {
               value={reports[0].profile.id}
               onChange={(pid) => void assignProfile(reports[0].log.id, pid)}
               options={profiles.map((p) => [p.id, p.name])}
-              title={`Robot profile used for ${reports[0].log.name}. Other logs: Settings, Robot.`}
+              title={`Robot profile used for ${reports[0].log.name}. Other logs: Robot setup, Logs.`}
             />
           </ToolGroup>
         )}

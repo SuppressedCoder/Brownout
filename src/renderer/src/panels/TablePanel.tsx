@@ -5,7 +5,7 @@
  * The change list recomputes only after panning/zooming pauses, and the
  * current row is highlighted without re-rendering the table.
  */
-import { memo, useMemo, useRef, useState } from 'react';
+import { memo, useMemo, useRef } from 'react';
 import { panelStore, updatePanel, type TableSettings } from '../state/panels';
 import { sessionStore, type LogEntry } from '../state/session';
 import { timeStore, setCursor } from '../state/time';
@@ -19,7 +19,7 @@ import { formatTime } from '@core/alignment';
 import { indexAtOrBefore, type Series } from '@core/log';
 import { useFieldIndex, shortKey, type MergedField } from '../lib/fields';
 import { Toolbar, ToolButton, ToolSelect, ToolSpacer } from '../components/Toolbar';
-import { FieldPicker } from '../components/FieldPicker';
+import { PanelFieldStrip } from '../components/FieldStrip';
 import { Icon } from '../components/Icon';
 
 interface Col {
@@ -59,7 +59,6 @@ export function TablePanel({ id }: { id: string }) {
   const potato = useStore(settingsStore, (s) => s.potato);
   const view = useSettledView();
   const fields = useFieldIndex();
-  const [picker, setPicker] = useState(false);
   const tick = useSeriesTick();
   const bodyRef = useRef<HTMLTableSectionElement>(null);
   const maxRows = potato ? 500 : 2000;
@@ -110,10 +109,8 @@ export function TablePanel({ id }: { id: string }) {
 
   return (
     <div className="panel table-panel">
+      <PanelFieldStrip id={id} />
       <Toolbar>
-        <ToolButton icon="plus" onClick={() => setPicker(true)}>
-          Field
-        </ToolButton>
         <ToolSelect
           value={settings.mode}
           onChange={(v) => updatePanel<TableSettings>(id, { mode: v as TableSettings['mode'] })}
@@ -126,7 +123,7 @@ export function TablePanel({ id }: { id: string }) {
         {settings.keys.length > 0 && <ToolButton onClick={() => updatePanel<TableSettings>(id, { keys: [] })}>Clear</ToolButton>}
       </Toolbar>
       {settings.keys.length === 0 ? (
-        <div className="panel-placeholder">Drag fields here or click “Field”.</div>
+        <div className="panel-placeholder" />
       ) : settings.mode === 'cursor' ? (
         <CursorTable id={id} keys={settings.keys} logs={logs} cols={cols} fields={fields} />
       ) : (
@@ -154,12 +151,6 @@ export function TablePanel({ id }: { id: string }) {
           </table>
           {rows.length === 0 && <div className="hint">No value changes in the visible range.</div>}
         </div>
-      )}
-      {picker && (
-        <FieldPicker
-          onClose={() => setPicker(false)}
-          onPick={(key) => !settings.keys.includes(key) && updatePanel<TableSettings>(id, { keys: [...settings.keys, key] })}
-        />
       )}
     </div>
   );

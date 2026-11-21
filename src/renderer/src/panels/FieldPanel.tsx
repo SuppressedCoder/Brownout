@@ -10,7 +10,7 @@
  * whole field again. Nothing zooms or recenters by itself, and the view is not
  * held to the field: zoom out past it, drag it anywhere.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { panelStore, updatePanel, type FieldSettings } from '../state/panels';
 import { sessionStore, currentSeason, allSeasons, type LogEntry } from '../state/session';
 import { profileStore, profileById, type Layer } from '../state/profiles';
@@ -20,7 +20,7 @@ import { uiStore } from '../state/ui';
 import { tagIdsFromValue, tagPosesFromValue, poseFromValue, isBotposeKey } from '@core/vision';
 import { fieldPicture, pictureImage, bundledTags, hasTagVariants, fieldAssetTicker, addCustomField, removeCustomField } from '../lib/fieldAssets';
 import { MenuButton, MenuItem, MenuSeparator, MenuLabel } from '../components/Menu';
-import { Icon, Caret } from '../components/Icon';
+import { Caret } from '../components/Icon';
 import { toast } from '../state/ui';
 import { timeStore, setCursor, setHover } from '../state/time';
 import { settingsStore } from '../state/settings';
@@ -32,8 +32,8 @@ import { centerToBlueWall, flipAlliance, toPose, type Pose, type SeasonPreset } 
 import { withAlpha } from '../lib/colors';
 import { T } from '../lib/theme';
 import { fieldIndex, shortKey } from '../lib/fields';
-import { Toolbar, ToolButton, ToolSelect, ToolSpacer, ToolGroup } from '../components/Toolbar';
-import { FieldPicker } from '../components/FieldPicker';
+import { Toolbar, ToolButton, ToolSelect, ToolSpacer } from '../components/Toolbar';
+import { PanelFieldStrip } from '../components/FieldStrip';
 
 const MAX_ZOOM = 40;
 /** Zoomed out to a fifth of the fitted size at most: past the field is fine, Fit brings it back. */
@@ -59,7 +59,6 @@ export function FieldPanel({ id }: { id: string }) {
   const customFields = useStore(sessionStore, (s) => s.customFields);
   const customTags = useStore(sessionStore, (s) => !!s.fieldTags);
   const tagsTracks = useStore(sessionStore, (s) => tagsSeenTracksOn(s.timelineTracks));
-  const [picker, setPicker] = useState(false);
   const viewRef = useRef<View | null>(null);
 
   const draw = useCallback((dc: DrawContext) => drawField(dc, id, viewRef), [id]);
@@ -98,10 +97,8 @@ export function FieldPanel({ id }: { id: string }) {
 
   return (
     <div className="panel field-panel">
+      <PanelFieldStrip id={id} />
       <Toolbar>
-        <ToolButton icon="plus" onClick={() => setPicker(true)} title="Add a Pose2d, Pose2d[] or Translation2d[] field">
-          Pose field
-        </ToolButton>
         <MenuButton
           label={
             <>
@@ -271,14 +268,6 @@ export function FieldPanel({ id }: { id: string }) {
           title="How much of the robot's path trails behind it"
         />
         <ToolSpacer />
-        {settings.keys.map((k) => (
-          <ToolGroup className="chip" key={k}>
-            <span title={k}>{shortKey(k)}</span>
-            <button className="chip-btn" title="Remove" onClick={() => set({ keys: settings.keys.filter((x) => x !== k) })}>
-              <Icon name="close" size={10} />
-            </button>
-          </ToolGroup>
-        ))}
       </Toolbar>
       <div className="canvas-host">
         <canvas ref={ref} />
@@ -288,14 +277,6 @@ export function FieldPanel({ id }: { id: string }) {
           </div>
         )}
       </div>
-      {picker && (
-        <FieldPicker
-          title="Add pose field"
-          filter={(f) => (f.kind === 'struct' || f.kind === 'struct[]') && ['Pose2d', 'Pose3d', 'Translation2d'].includes(f.structName ?? '')}
-          onClose={() => setPicker(false)}
-          onPick={(key) => !settings.keys.includes(key) && set({ keys: [...settings.keys, key] })}
-        />
-      )}
     </div>
   );
 }

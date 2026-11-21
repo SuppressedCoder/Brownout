@@ -317,6 +317,140 @@ code {
 .power-view .standalone-panel {
   flex: 1;
 }
+/* Robot setup (components/RobotSetup.tsx): the field to drop on, the profile in tabs beside it */
+.robot-setup {
+  flex-direction: row;
+}
+.rs-field {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  border: 2px dashed transparent;
+  border-radius: 6px;
+}
+.rs-field .standalone-panel {
+  flex: 1;
+}
+.rs-field.drop-ready {
+  border-color: var(--accent);
+}
+.rs-side {
+  flex: 0 0 400px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.setup-profile {
+  padding: 8px 10px 4px;
+  border-bottom: 1px solid var(--line);
+}
+.setup-profile .profile-bar {
+  margin-bottom: 4px;
+}
+.rs-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--line);
+}
+.rs-tab {
+  background: none;
+  border: none;
+  border-radius: 3px;
+  padding: 3px 8px;
+  color: var(--fg2);
+  font-size: 12px;
+  cursor: pointer;
+}
+.rs-tab:hover {
+  background: var(--hover-bg);
+}
+.rs-tab.active {
+  background: var(--active-bg);
+  color: var(--strong);
+}
+.rs-body {
+  flex: 1;
+  min-height: 0;
+  padding: 6px 10px 20px;
+}
+.slot-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-bottom: 9px;
+}
+.slot-card {
+  margin: 0 0 10px;
+  padding: 7px 8px 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.slot-card-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+.cam-slots {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0 8px;
+}
+.role-group {
+  margin-bottom: 4px;
+}
+.role-group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 2px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 8px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.role-group-head .count {
+  color: var(--fg2);
+  font-weight: normal;
+  font-size: 11px;
+}
+.on-field .dot,
+.slot-card .dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 2px;
+}
+.drop-menu {
+  position: fixed;
+  max-width: 380px;
+}
+.drop-menu .drop-none {
+  padding: 4px 10px;
+  max-width: 340px;
+  white-space: normal;
+}
+@media (max-width: 1000px) {
+  .rs-side {
+    flex-basis: 320px;
+  }
+}
+
 /* a narrow window stacks the video above the field */
 @media (max-width: 900px) {
   .vr-main {
@@ -333,7 +467,9 @@ code {
   position: relative;
 }
 .panel-frame.drop-target::after {
-  content: 'Drop to add';
+  /* the field that would be added (set while dragging over the panel) */
+  content: attr(data-drop);
+  font-family: var(--mono);
   position: absolute;
   inset: 4px;
   border: 2px dashed var(--accent);
@@ -766,6 +902,10 @@ h4 {
   border: 1px solid var(--line);
   border-radius: 4px;
   overflow: hidden;
+}
+.search-group .search-group {
+  /* a folder inside the box's folder */
+  margin: 2px 4px 4px 10px;
 }
 .search-folder {
   display: flex;
@@ -2733,4 +2873,595 @@ h4 {
     flex: 1;
     min-height: 0;
   }
+}
+
+/* Field slots: one box wherever a field is chosen (components/FieldSlot.tsx) */
+.fslot-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.fslot-wrap.inline {
+  flex-direction: row;
+  align-items: center;
+}
+.fslot-label {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  font-size: 12px;
+}
+.fslot-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 75%;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* the name keeps its room; a long list of types loses its end (the whole list is in the tooltip) */
+.fslot-types {
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--fg2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fslot-wrap.bad .fslot-types {
+  color: var(--err-text);
+}
+.fslot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 28px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--bg2);
+  font-family: var(--mono);
+  font-size: 12px;
+  cursor: text;
+  outline: none;
+  transition:
+    border-color 0.12s,
+    background-color 0.12s;
+}
+.fslot-wrap.inline .fslot {
+  min-height: 22px;
+  padding: 1px 6px;
+  min-width: 160px;
+  max-width: 340px;
+}
+.fslot:hover,
+.fslot:focus-visible {
+  border-color: var(--fg2);
+}
+.fslot.empty {
+  border-style: dashed;
+}
+.fslot-none {
+  color: var(--fg2);
+  font-family: var(--font);
+}
+.fslot.lit {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.fslot.over {
+  border: 1px solid var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+  background: var(--accent-soft);
+}
+.fslot.missing {
+  border-color: var(--warn);
+}
+.fslot.bad {
+  border-color: var(--err);
+  box-shadow: inset 3px 0 0 var(--err);
+}
+.fslot.typing {
+  border: 1px solid var(--accent);
+  background: var(--bg);
+}
+.fslot-input {
+  min-width: 0;
+}
+.fslot-input input,
+.fslot-input .search-ghost {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.fslot-clear {
+  margin-left: auto;
+  visibility: hidden;
+}
+.fslot:hover .fslot-clear {
+  visibility: visible;
+}
+.fkey {
+  display: flex;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.fkey-leaf {
+  flex: none;
+  font-weight: 600;
+  color: var(--strong);
+}
+.fslot-tip {
+  position: absolute;
+  left: -1px;
+  top: calc(100% + 4px);
+  z-index: 40;
+  padding: 3px 7px;
+  border: 1px solid var(--err);
+  border-radius: 4px;
+  background: var(--bg3);
+  color: var(--err-text);
+  font: 11px/1.3 var(--font);
+  white-space: nowrap;
+  pointer-events: none;
+}
+@keyframes fslot-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-4px);
+  }
+  40% {
+    transform: translateX(4px);
+  }
+  60% {
+    transform: translateX(-3px);
+  }
+  80% {
+    transform: translateX(2px);
+  }
+}
+.shake {
+  animation: fslot-shake 0.32s ease-in-out;
+}
+
+/* the list under a slot while typing: fields that fit, grouped by folder */
+.fsearch {
+  position: fixed;
+  z-index: 3500;
+  overflow: auto;
+  padding: 2px 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  font-size: 12px;
+}
+.fsearch .search-group {
+  margin: 3px 4px;
+}
+.fsearch-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 8px;
+  line-height: 19px;
+  font-family: var(--mono);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.fsearch-row.hl {
+  background: var(--active-bg);
+}
+.fsearch-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fsearch-name .fkey-leaf {
+  font-weight: inherit;
+  color: inherit;
+}
+
+/* several fields: chips with + Field at the end */
+.flist {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.fchip {
+  position: relative;
+  max-width: 100%;
+  min-width: 0;
+  font-family: var(--mono);
+  cursor: default;
+}
+.fchip .fkey {
+  /* a long key loses the start of its folder first */
+  min-width: 0;
+}
+.fchip .fkey-leaf {
+  font-weight: 600;
+}
+.fchip.missing {
+  border-color: var(--warn);
+}
+.fchip.over {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.fchip.bad {
+  border-color: var(--err);
+  box-shadow: inset 3px 0 0 var(--err);
+}
+.fchip.gap-before::before,
+.fchip.gap-after::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+.fchip.gap-before::before {
+  left: -4px;
+}
+.fchip.gap-after::after {
+  right: -4px;
+}
+.fchip.add {
+  border-style: dashed;
+  color: var(--fg2);
+  font-family: var(--font);
+  cursor: pointer;
+  padding-right: 7px;
+}
+.fchip.add:hover {
+  color: var(--fg);
+  border-color: var(--fg2);
+}
+.flist.lit .fchip.add {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.fchip.add.over {
+  border-style: solid;
+  color: var(--fg);
+}
+.fchip.add.typing {
+  border: 1px solid var(--accent);
+  background: var(--bg);
+  min-width: 200px;
+  cursor: text;
+}
+.fslot-tip.in-list {
+  top: 100%;
+}
+
+/* the strip under a panel's tab: the fields it shows (components/FieldStrip.tsx) */
+.field-strip {
+  flex: none;
+  display: flex;
+  /* safe: chips taller than the strip scroll from their first row instead of overflowing upward */
+  align-items: safe center;
+  gap: 4px;
+  min-width: 0;
+  max-height: 56px;
+  /* chips wrap; a strip never scrolls sideways */
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--line);
+  scrollbar-width: thin;
+}
+.field-strip .flist {
+  flex: 1;
+  min-width: 0;
+}
+.field-strip .fchip {
+  font-size: 11px;
+}
+.field-strip .fslot-wrap.inline {
+  flex: 1;
+}
+.field-strip .fslot-wrap.inline .fslot {
+  max-width: 480px;
+}
+.fchip.linked,
+.tree-row.linked,
+.ip-row.linked {
+  background: var(--accent-soft);
+}
+.fchip.linked {
+  border-color: var(--accent);
+}
+.line-swatch {
+  flex: none;
+  color: var(--fg2);
+}
+.axis-btn {
+  font-family: var(--mono);
+}
+
+/* panel numbers: a square in the panel's color (lib/panelLinks.ts) */
+.pn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 3px;
+  color: var(--on-panel);
+  font: 600 10px/1 var(--font);
+}
+.pn.small {
+  min-width: 13px;
+  height: 13px;
+  font-size: 9px;
+}
+.row-pns {
+  display: inline-flex;
+  gap: 2px;
+  flex: none;
+}
+.panel-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+}
+.panel-tab.linked .pn {
+  box-shadow: 0 0 0 2px var(--strong);
+}
+.panel-frame.linked::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 2px solid var(--accent);
+  pointer-events: none;
+  z-index: 5;
+}
+.panel-frame.drop-lit::before {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  border: 1px dashed var(--accent);
+  border-radius: 3px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* In panels: one section per grid area, each scrolling (components/InPanels.tsx) */
+.in-panels-btn {
+  flex: none;
+  white-space: nowrap;
+}
+.in-panels {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ip-sec {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ip-sec + .ip-sec {
+  border-top: 3px solid var(--line);
+}
+.ip-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 8px;
+  background: var(--bg3);
+  border: none;
+  border-bottom: 1px solid var(--line);
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.ip-head:hover {
+  background: var(--bg2);
+}
+.ip-count {
+  margin-left: auto;
+  color: var(--fg2);
+  font-weight: 400;
+  font-size: 11px;
+}
+/* a minimized section is only its header; the others share the room */
+.ip-sec.collapsed {
+  flex: none;
+}
+.ip-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ip-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 2px 0 6px;
+  scrollbar-width: thin;
+}
+.ip-body .search-group {
+  margin: 3px 4px;
+}
+.ip-row {
+  position: relative;
+  padding: 3px 8px;
+  font-size: 12px;
+}
+.ip-row.from-profile {
+  cursor: pointer;
+}
+/* a field dragged over a row: the middle swaps it, the edges add beside it */
+.ip-row.over {
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.ip-row.bad {
+  box-shadow: inset 3px 0 0 var(--err);
+}
+.ip-row.gap-before::before,
+.ip-row.gap-after::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+.ip-row.gap-before::before {
+  top: -1px;
+}
+.ip-row.gap-after::after {
+  bottom: -1px;
+}
+.ip-remove {
+  margin-left: auto;
+  flex: none;
+  visibility: hidden;
+}
+.ip-row:hover .ip-remove,
+.ip-remove:focus-visible {
+  visibility: visible;
+}
+.ip-add {
+  padding: 3px 8px;
+}
+.ip-sec {
+  position: relative;
+}
+.ip-sec.drop-lit::before {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  border: 1px dashed var(--accent);
+  border-radius: 3px;
+  pointer-events: none;
+  z-index: 2;
+}
+.ip-sec.drop-target {
+  background: var(--accent-soft);
+}
+.ip-key {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-family: var(--mono);
+}
+.ip-style {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+  color: var(--fg2);
+}
+.ip-axis {
+  padding: 0 2px;
+  font: 9px var(--mono);
+}
+.ip-vals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  padding-left: 14px;
+}
+.ip-val {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.ip-val .dot,
+.ip-style .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+}
+.ip-num {
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* a graph while a field it can show is dragged: its left and right axis */
+.axis-drops {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  gap: 4px;
+  padding: 6px;
+  z-index: 6;
+}
+.axis-drop {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--accent);
+  border-radius: 6px;
+  background: var(--accent-soft);
+  opacity: 0.55;
+}
+.axis-drop.over {
+  opacity: 1;
+  border-style: solid;
+}
+.axis-drop-label {
+  max-width: 90%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 600 14px var(--mono);
+  color: var(--accent);
+}
+.timeline .canvas-host.drop-lit {
+  outline: 1px dashed var(--accent);
+  outline-offset: -2px;
+}
+.fchip.fixed {
+  cursor: pointer;
+  border-style: dotted;
+}
+/* a panel with a field strip: the corner buttons sit at the strip's right end, which keeps room for them */
+.panel-frame:has(.field-strip) .max-btn,
+.panel-frame:has(.field-strip) .capture-btn {
+  top: 3px;
+}
+.panel-frame .field-strip {
+  padding-right: 64px;
 }

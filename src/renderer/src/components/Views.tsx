@@ -74,7 +74,7 @@ function Moments({ log }: { log: LogEntry }) {
   const lacking = !hasPose
     ? 'This log has no robot pose, so Brownout cannot check the position against vision.'
     : !hasEstimates
-      ? 'No camera in this log logs a pose estimate, so only position jumps are checked. Pick each camera’s estimate field in Robot profile, Cameras, to compare them.'
+      ? 'No camera in this log logs a pose estimate, so only position jumps are checked. Drop each camera’s estimate field on the field in Robot setup to compare them.'
       : '';
   return (
     <div className="vr-moments" data-testid="video-review-moments">

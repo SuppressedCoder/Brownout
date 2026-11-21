@@ -1,7 +1,7 @@
 /**
  * Power subsystems for a robot profile: name each subsystem and say which
  * motors belong to it. A motor is a current source: a PDH / PDP channel
- * number, or a logged current field. Used inside Settings (Robot) and as a
+ * number, or a logged current field. Used inside Robot setup (Power) and as a
  * dialog from the Power panel.
  */
 import { useEffect, useMemo, useState } from 'react';
@@ -12,9 +12,15 @@ import { useStore } from '../state/store';
 import { client } from '../worker/client';
 import { suggestSubsystems } from '@core/analyzers/subsystems';
 import { nextSubsystemColor } from '../lib/power';
-import { shortKey, type MergedField } from '../lib/fields';
-import { FieldPicker } from './FieldPicker';
+import { shortKey, type FieldSpec } from '../lib/fields';
+import { FieldList } from './FieldSlot';
 import { Icon } from './Icon';
+
+/** A motor's supply current: a number Brownout didn't make itself. */
+const CURRENT: FieldSpec = {
+  types: ['number'],
+  only: { test: (f) => !f.key.startsWith('/Brownout/'), reason: 'Brownout made this field; pick a logged current' },
+};
 
 interface ChannelHint {
   count: number;
@@ -68,15 +74,27 @@ export function SubsystemEditor({ profileId }: { profileId: string }) {
   const logs = useStore(sessionStore, (s) => s.logs);
   const mine = useMemo(() => logs.filter((l) => l.profileId === profileId), [logs, profileId]);
   const hints = useChannelHints(mine.find((l) => l.roles.pdhChannelCurrents));
-  const [pickFor, setPickFor] = useState<string | null>(null);
   const [channelsFor, setChannelsFor] = useState<string | null>(null);
   if (!profile) return null;
 
   const setSubs = (fn: (subs: Subsystem[]) => Subsystem[]) => updateProfile(profileId, (p) => ({ subsystems: fn(p.subsystems) }));
   const patch = (id: string, p: Partial<Subsystem>) => setSubs((subs) => subs.map((s) => (s.id === id ? { ...s, ...p } : s)));
-  const inLogs = (key: string) => mine.length === 0 || mine.some((l) => l.fields.some((f) => f.key === key));
   const channelOwner = (c: number, except: string) => profile.subsystems.find((s) => s.id !== except && s.channels.includes(c));
   const fieldOwner = (k: string, except: string) => profile.subsystems.find((s) => s.id !== except && s.fields.includes(k));
+  /** Put fields in a subsystem at an index (replacing the one there); a field belongs to one subsystem, so it leaves any other. */
+  const addFields = (id: string, at: number, keys: string[], replace = false) => {
+    const moved = keys.map((k) => fieldOwner(k, id)).filter((o): o is Subsystem => !!o);
+    setSubs((subs) =>
+      subs.map((x) => {
+        if (x.id !== id) return { ...x, fields: x.fields.filter((k) => !keys.includes(k)) };
+        const before = x.fields.slice(0, at).filter((k) => !keys.includes(k));
+        const after = x.fields.slice(replace ? at + 1 : at).filter((k) => !keys.includes(k));
+        return { ...x, fields: [...before, ...keys, ...after] };
+      }),
+    );
+    if (moved.length)
+      toast(`Moved ${keys.length === 1 ? shortKey(keys[0]) : `${moved.length} fields`} here from ${[...new Set(moved.map((o) => o.name))].join(', ')}.`);
+  };
   const channelCount = hints?.count ?? 24;
 
   const add = () => {
@@ -134,7 +152,6 @@ export function SubsystemEditor({ profileId }: { profileId: string }) {
             </button>
           </div>
           <div className="subsys-sources">
-            {s.channels.length === 0 && s.fields.length === 0 && <span className="hint">No motors yet.</span>}
             {[...s.channels]
               .sort((a, b) => a - b)
               .map((c) => (
@@ -153,30 +170,31 @@ export function SubsystemEditor({ profileId }: { profileId: string }) {
                   </button>
                 </span>
               ))}
-            {s.fields.map((k) => {
-              const stator = /stator/i.test(k);
-              const missing = !inLogs(k);
-              return (
-                <span
-                  className={`chip${missing ? ' chip-missing' : ''}${stator ? ' chip-warn' : ''}`}
-                  key={k}
-                  title={`${k}${missing ? '\nNot in the open logs for this robot' : ''}${stator ? '\nThis looks like stator current, which is higher than what the battery supplies. Use supply current if it is logged.' : ''}`}
-                >
-                  {(stator || missing) && <Icon name="warning" size={11} />}
-                  {shortKey(k, 3)}
-                  <button className="chip-btn" title="Remove" onClick={() => patch(s.id, { fields: s.fields.filter((x) => x !== k) })}>
-                    <Icon name="close" size={10} />
-                  </button>
-                </span>
-              );
-            })}
           </div>
+          <FieldList
+            items={s.fields.map((k) => ({
+              key: k,
+              swatch: /stator/i.test(k) ? <Icon name="warning" size={11} /> : undefined,
+              note: /stator/i.test(k)
+                ? 'This looks like stator current, which is higher than what the battery supplies. Use supply current if it is logged.'
+                : undefined,
+            }))}
+            spec={CURRENT}
+            logs={mine}
+            onInsert={(i, fs) =>
+              addFields(
+                s.id,
+                i,
+                fs.map((f) => f.key),
+              )
+            }
+            onReplace={(i, f) => addFields(s.id, i, [f.key], true)}
+            onRemove={(i) => patch(s.id, { fields: s.fields.filter((_, j) => j !== i) })}
+            testId="subsys-fields"
+          />
           <div className="subsys-actions">
             <button className="btn small" onClick={() => setChannelsFor(channelsFor === s.id ? null : s.id)} data-testid="subsys-channels">
               PDH channels
-            </button>
-            <button className="btn small" onClick={() => setPickFor(s.id)}>
-              <Icon name="plus" size={11} /> Current field
             </button>
           </div>
           {channelsFor === s.id && (
@@ -236,23 +254,6 @@ export function SubsystemEditor({ profileId }: { profileId: string }) {
         Use each motor’s <b>supply</b> current. Stator current is higher than what the battery supplies and would overstate that motor’s share. Assign a motor
         once: by channel or by field, not both.
       </div>
-      {pickFor && (
-        <FieldPicker
-          title="Add a motor current field"
-          filter={(f: MergedField) => f.kind === 'number' && !f.key.startsWith('/Brownout/')}
-          onClose={() => setPickFor(null)}
-          onPick={(key) => {
-            const owner = fieldOwner(key, pickFor);
-            setSubs((subs) =>
-              subs.map((x) => {
-                if (x.id === pickFor) return x.fields.includes(key) ? x : { ...x, fields: [...x.fields, key] };
-                return { ...x, fields: x.fields.filter((k) => k !== key) };
-              }),
-            );
-            if (owner) toast(`Moved ${shortKey(key)} here from ${owner.name}.`);
-          }}
-        />
-      )}
     </div>
   );
 }

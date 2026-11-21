@@ -49,6 +49,8 @@ export function useStore<T extends object, R>(store: Store<T>, selector: (s: T) 
 
 function shallowEqual(a: unknown, b: unknown): boolean {
   if (Object.is(a, b)) return true;
+  // a Map or Set has no keys of its own to compare: every one would look equal to the last
+  if (a instanceof Map || a instanceof Set || b instanceof Map || b instanceof Set) return false;
   if (Array.isArray(a) && Array.isArray(b)) return a.length === b.length && a.every((x, i) => Object.is(x, b[i]));
   if (typeof a === 'object' && typeof b === 'object' && a && b) {
     const ka = Object.keys(a);

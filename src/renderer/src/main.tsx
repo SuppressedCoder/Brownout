@@ -1,3 +1,4 @@
+import { gridStore } from './lib/panelLinks';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import 'dockview-react/dist/styles/dockview.css';
@@ -23,6 +24,8 @@ import { seekStats, chaseSeek } from './lib/videoSeek';
   uiStore,
   profileStore,
   videoStore,
+  /** Panel numbers and the grid's areas (lib/panelLinks.ts). */
+  gridStore,
   /** The range the timeline covers right now (the match or the whole log). */
   timeBounds,
   /** Video seeks asked for and actually issued (lib/videoSeek.ts). */
