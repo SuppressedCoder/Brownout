@@ -18,7 +18,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NumberInput } from '../components/NumberInput';
 import { evalNumber } from '@core/mathExpr';
-import { panelStore, updatePanel, type GraphSettings } from '../state/panels';
+import { panelStore, updatePanel, panelAccepts, PANEL_TITLES, type GraphSettings } from '../state/panels';
+import { reportAdd } from '../components/Sidebar';
+import { dragStore, hasFieldDrag, readFieldDrag } from '../lib/dnd';
+import { linkStore } from '../lib/panelLinks';
 import { sessionStore, type LogEntry } from '../state/session';
 import { timeStore, setCursor, setHover, setView, zoomAround } from '../state/time';
 import { settingsStore } from '../state/settings';
@@ -32,10 +35,10 @@ import { T } from '../lib/theme';
 import { decimateMinMax, visibleIndexRange, type Decimated } from '@core/decimate';
 import { indexAtOrBefore } from '@core/log';
 import { formatValue } from '../lib/format';
-import { fieldIndex, shortKey, useFieldIndex } from '../lib/fields';
+import { fieldIndex, shortKey } from '../lib/fields';
 import { formatTime } from '@core/alignment';
-import { FieldPicker } from '../components/FieldPicker';
-import { Toolbar, ToolButton, ToolSelect, ToolSpacer, ToolGroup, OverflowRow, useCompact } from '../components/Toolbar';
+import { PanelFieldStrip } from '../components/FieldStrip';
+import { Toolbar, ToolButton, ToolSelect, ToolSpacer, ToolGroup } from '../components/Toolbar';
 import { MenuButton } from '../components/Menu';
 import { Icon, Caret } from '../components/Icon';
 
@@ -85,17 +88,14 @@ const decCaches = new Map<string, Map<string, DecCache>>();
 export function GraphPanel({ id }: { id: string }) {
   const settings = useStore(panelStore, (s) => s.panels[id] as GraphSettings);
   const logs = useStore(sessionStore, (s) => s.logs);
-  const fields = useFieldIndex();
   const geomRef = useRef<Geom>({ x0: 0, x1: 1, top: 0, bottom: 1, hasLeft: true, hasRight: false, lanes: [], view: [0, 1] });
-  const [pickerOpen, setPickerOpen] = useState(false);
 
   const draw = useCallback((dc: DrawContext) => drawGraph(dc, id, geomRef), [id]);
-  const ref = useCanvas(draw, [timeStore, sessionStore, panelStore], [id]);
+  const ref = useCanvas(draw, [timeStore, sessionStore, panelStore, linkStore], [id]);
   useGraphInteraction(ref, id, geomRef);
   useEffect(() => () => void decCaches.delete(id), [id]);
 
   const visibleLogs = useMemo(() => logs.filter((l) => l.visible), [logs]);
-  const numericCount = settings.series.filter((s) => (fields.get(s.key)?.kind ?? 'number') === 'number').length;
   const manualY = !!settings.yLeft || !!settings.yRight;
 
   const addThreshold = async () => {
@@ -111,57 +111,10 @@ export function GraphPanel({ id }: { id: string }) {
     updatePanel<GraphSettings>(id, { thresholds: [...settings.thresholds, evalNumber(v)!] });
   };
 
-  const compact = useCompact();
-  const chip = (s: GraphSettings['series'][number], i: number, full: boolean) => {
-    const f = fields.get(s.key);
-    const numeric = (f?.kind ?? 'number') === 'number';
-    return (
-      <span className={`chip${full ? ' chip-row' : ''}`} key={s.key} title={s.key}>
-        <svg width="18" height="8">
-          <line x1="0" y1="4" x2="18" y2="4" stroke="currentColor" strokeWidth="2" strokeDasharray={FIELD_DASHES[i % FIELD_DASHES.length].join(' ')} />
-        </svg>
-        <span className="chip-label">{full ? s.key : shortKey(s.key)}</span>
-        {f?.unit ? <span className="unit">{f.unit}</span> : null}
-        {numeric && numericCount > 0 && (
-          <button
-            className="chip-btn"
-            title="Toggle left / right axis"
-            onClick={() =>
-              updatePanel<GraphSettings>(id, {
-                series: settings.series.map((x) => (x.key === s.key ? { ...x, axis: x.axis === 'left' ? 'right' : 'left' } : x)),
-              })
-            }
-          >
-            {s.axis === 'left' ? 'L' : 'R'}
-          </button>
-        )}
-        <button className="chip-btn" title="Remove" onClick={() => updatePanel<GraphSettings>(id, { series: settings.series.filter((x) => x.key !== s.key) })}>
-          <Icon name="close" size={10} />
-        </button>
-      </span>
-    );
-  };
-  const fieldsLabel = `${settings.series.length} field${settings.series.length === 1 ? '' : 's'}`;
-
   return (
     <div className="panel graph-panel">
+      <PanelFieldStrip id={id} />
       <Toolbar>
-        <ToolButton icon="plus" title="Add a field (or drag fields from the sidebar)" onClick={() => setPickerOpen(true)}>
-          Field
-        </ToolButton>
-        {compact && settings.series.length > 0 && (
-          <MenuButton
-            label={
-              <>
-                {fieldsLabel} <Caret />
-              </>
-            }
-            title="The fields on this graph"
-            testId="graph-fields"
-          >
-            {() => <div className="chip-list">{settings.series.map((s, i) => chip(s, i, true))}</div>}
-          </MenuButton>
-        )}
         <MenuButton
           label={
             <>
@@ -230,40 +183,80 @@ export function GraphPanel({ id }: { id: string }) {
           </ToolButton>
         )}
       </Toolbar>
-      {!compact && settings.series.length > 0 && (
-        <OverflowRow
-          className="series-chips"
-          compact={false}
-          moreTitle="The rest of the fields on this graph"
-          moreLabel={(n) => `+${n} more`}
-          testId="chips-more"
-        >
-          {settings.series.map((s, i) => chip(s, i, false))}
-        </OverflowRow>
-      )}
       <div className="canvas-host">
         <canvas ref={ref} />
+        <AxisDrop id={id} />
         {settings.series.length === 0 && (
           <div className="panel-placeholder" data-testid="graph-empty">
-            {settings.note ? (
-              <div className="placeholder-note">
-                {settings.note}
-                <span className="hint">Drag fields here, or click “Field”.</span>
-              </div>
-            ) : (
-              'Drag fields here, or click “Field”.'
-            )}
+            {settings.note && <div className="placeholder-note">{settings.note}</div>}
           </div>
         )}
       </div>
-      {pickerOpen && (
-        <FieldPicker
-          onClose={() => setPickerOpen(false)}
-          onPick={(key) => {
-            if (!settings.series.some((x) => x.key === key)) updatePanel<GraphSettings>(id, { series: [...settings.series, { key, axis: 'left' }] });
-          }}
-        />
-      )}
+    </div>
+  );
+}
+
+/**
+ * While a field the graph can show is dragged, the plot splits into its left
+ * and right axis: drop on a half to add the field on that axis. The half under
+ * the pointer shows the field.
+ */
+function AxisDrop({ id }: { id: string }) {
+  const can = useStore(dragStore, (s) => !!s.items && panelAccepts('graph', s.items[0].kind, s.items[0].structName));
+  const [over, setOver] = useState<Axis | null>(null);
+  useEffect(() => {
+    if (!can) setOver(null);
+  }, [can]);
+  if (!can) return null;
+  const items = dragStore.get().items ?? [];
+  const half = (axis: Axis) => (
+    <div
+      className={`axis-drop ${axis}${over === axis ? ' over' : ''}`}
+      onDragEnter={(e) => {
+        if (!hasFieldDrag(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (over !== axis) setOver(axis);
+      }}
+      onDragOver={(e) => {
+        if (!hasFieldDrag(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = 'copy';
+        if (over !== axis) setOver(axis);
+      }}
+      onDragLeave={() => setOver((o) => (o === axis ? null : o))}
+      onDrop={(e) => {
+        const all = readFieldDrag(e) ?? [];
+        const dropped = all.filter((f) => panelAccepts('graph', f.kind, f.structName));
+        setOver(null);
+        if (!all.length) return;
+        e.preventDefault();
+        e.stopPropagation();
+        reportAdd(
+          all.length,
+          dropped.length,
+          all.filter((f) => !dropped.includes(f)),
+          PANEL_TITLES.graph,
+        );
+        if (!dropped.length) return;
+        const keys = dropped.map((f) => f.key);
+        updatePanel<GraphSettings>(id, (cur) => ({
+          series: [
+            ...cur.series.map((x) => (keys.includes(x.key) ? { ...x, axis } : x)),
+            ...keys.filter((k) => !cur.series.some((x) => x.key === k)).map((key) => ({ key, axis })),
+          ],
+        }));
+      }}
+      data-testid={`axis-drop-${axis}`}
+    >
+      <span className="axis-drop-label">{over === axis && items[0] ? items[0].key : axis === 'left' ? 'L' : 'R'}</span>
+    </div>
+  );
+  return (
+    <div className="axis-drops">
+      {half('left')}
+      {half('right')}
     </div>
   );
 }
@@ -726,13 +719,16 @@ function drawGraph(dc: DrawContext, id: string, geomRef: React.MutableRefObject<
       ctx.fillText(formatTick(th), x0 + 4, y - 2);
     }
 
-    // Series
+    // Series (the one the pointer is on, in the field list or this graph's strip, drawn bolder)
+    const hot = linkStore.get().key;
+    const anyHot = hot !== null && items.some((x) => x.key === hot);
     for (const it of items) {
       const color = diff ? pal.strong : it.log.color;
       const dash = FIELD_DASHES[it.idx % FIELD_DASHES.length];
       const dec = it.c.dec;
       ctx.strokeStyle = color;
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = anyHot && it.key === hot ? 3 : 1.5;
+      ctx.globalAlpha = anyHot && it.key !== hot ? 0.45 : 1;
       ctx.setLineDash(dash);
       ctx.beginPath();
       let started = false;
@@ -756,6 +752,7 @@ function drawGraph(dc: DrawContext, id: string, geomRef: React.MutableRefObject<
       }
       if (started) ctx.lineTo(x1, lastY);
       ctx.stroke();
+      ctx.globalAlpha = 1;
       // legend entry
       const f = fields.get(it.key);
       let value = '';

@@ -13,8 +13,8 @@ import { useSeriesTick } from '../lib/useSeries';
 import { formatDuration } from '@core/alignment';
 import { formatValue } from '../lib/format';
 import { shortKey, useFieldIndex } from '../lib/fields';
-import { Toolbar, ToolButton, ToolSelect, ToolSpacer } from '../components/Toolbar';
-import { FieldPicker } from '../components/FieldPicker';
+import { Toolbar, ToolSelect, ToolSpacer } from '../components/Toolbar';
+import { PanelFieldStrip } from '../components/FieldStrip';
 import { phaseWindows, statsOver } from './StatsPanel';
 import { Icon } from '../components/Icon';
 
@@ -34,7 +34,6 @@ export function ComparePanel({ id }: { id: string }) {
   const logs = useStore(sessionStore, (s) => s.logs);
   const fields = useFieldIndex();
   const [sort, setSort] = useState<{ id: string; dir: 1 | -1 } | null>(null);
-  const [picker, setPicker] = useState(false);
   const tick = useSeriesTick();
 
   const cols = useMemo((): Col[] => {
@@ -150,10 +149,8 @@ export function ComparePanel({ id }: { id: string }) {
 
   return (
     <div className="panel compare-panel">
+      <PanelFieldStrip id={id} />
       <Toolbar>
-        <ToolButton onClick={() => setPicker(true)} title="Add min/mean/max columns for a numeric field">
-          + Metric field
-        </ToolButton>
         <ToolSelect
           value={settings.phase}
           onChange={(v) => updatePanel<CompareSettings>(id, { phase: v as CompareSettings['phase'] })}
@@ -166,14 +163,6 @@ export function ComparePanel({ id }: { id: string }) {
           title="Phase for added metric fields"
         />
         <ToolSpacer />
-        {settings.keys.map((k) => (
-          <span className="chip" key={k} title={k}>
-            {shortKey(k)}
-            <button className="chip-btn" onClick={() => updatePanel<CompareSettings>(id, { keys: settings.keys.filter((x) => x !== k) })}>
-              <Icon name="close" size={10} />
-            </button>
-          </span>
-        ))}
       </Toolbar>
       {logs.length === 0 ? (
         <div className="panel-placeholder">Open two or more logs to compare them.</div>
@@ -228,13 +217,6 @@ export function ComparePanel({ id }: { id: string }) {
             </tbody>
           </table>
         </div>
-      )}
-      {picker && (
-        <FieldPicker
-          filter={(f) => f.kind === 'number'}
-          onClose={() => setPicker(false)}
-          onPick={(key) => !settings.keys.includes(key) && updatePanel<CompareSettings>(id, { keys: [...settings.keys, key] })}
-        />
       )}
     </div>
   );

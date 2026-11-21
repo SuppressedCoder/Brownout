@@ -6,14 +6,16 @@
 import { useState } from 'react';
 import { NumberInput } from '../components/NumberInput';
 import { panelStore, type InfoSettings } from '../state/panels';
-import { sessionStore, setRoleOverride, setManualOffset, type LogEntry } from '../state/session';
+import { sessionStore, setManualOffset } from '../state/session';
 import { useStore } from '../state/store';
 import { formatDuration } from '@core/alignment';
 import { fileSize } from '../lib/format';
-import { ROLE_LABELS, type Role } from '@core/roles';
+import { ROLE_LABELS } from '@core/roles';
 import { Toolbar, ToolSelect } from '../components/Toolbar';
 import { Icon } from '../components/Icon';
 import { GuideLink } from '../components/Guide';
+import { NamesSection } from '../components/RobotSettings';
+import { profileStore, profileById } from '../state/profiles';
 
 export function InfoPanel({ id }: { id: string }) {
   useStore(panelStore, (s) => s.panels[id] as InfoSettings);
@@ -22,9 +24,11 @@ export function InfoPanel({ id }: { id: string }) {
   const log = logs.find((l) => l.id === which) ?? logs[0];
   const [showHow, setShowHow] = useState<string | null>(null);
   const [showRoles, setShowRoles] = useState(false);
+  const profiles = useStore(profileStore, (s) => s.profiles);
 
   if (!log) return <div className="panel-placeholder">Open a log to see its info.</div>;
 
+  const profile = profiles.find((p) => p.id === log.profileId) ?? profileById(log.profileId);
   const rs = log.robotState;
   const fmt = (t?: number) => (t === undefined ? '—' : `${(t - log.startTs).toFixed(2)} s into log`);
   const missing = log.health.filter((h) => !h.present);
@@ -128,22 +132,9 @@ export function InfoPanel({ id }: { id: string }) {
         </div>
 
         <h4 className="clickable" onClick={() => setShowRoles(!showRoles)}>
-          <Icon name={showRoles ? 'chevronDown' : 'chevronRight'} size={10} /> Field names (role mapping, saved in the robot profile)
+          <Icon name={showRoles ? 'chevronDown' : 'chevronRight'} size={10} /> Field names
         </h4>
-        {showRoles && (
-          <table className="kv">
-            <tbody>
-              {(Object.keys(ROLE_LABELS) as Role[]).map((role) => (
-                <tr key={role}>
-                  <th>{ROLE_LABELS[role]}</th>
-                  <td>
-                    <RoleSelect log={log} role={role} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        {showRoles && <NamesSection profile={profile} />}
       </div>
     </div>
   );
@@ -155,45 +146,5 @@ function Row({ k, v }: { k: string; v: React.ReactNode }) {
       <th>{k}</th>
       <td>{v}</td>
     </tr>
-  );
-}
-
-function RoleSelect({ log, role }: { log: LogEntry; role: Role }) {
-  const candidates = log.roleCandidates[role] ?? [];
-  const current = log.roles[role] ?? '';
-  const [custom, setCustom] = useState(false);
-  if (custom)
-    return (
-      <input
-        className="tool-input"
-        placeholder="exact field key"
-        autoFocus
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            void setRoleOverride(log.id, role, (e.target as HTMLInputElement).value || undefined);
-            setCustom(false);
-          }
-          if (e.key === 'Escape') setCustom(false);
-        }}
-      />
-    );
-  return (
-    <select
-      className="tool-select"
-      value={current}
-      onChange={(e) => {
-        if (e.target.value === '__custom') setCustom(true);
-        else void setRoleOverride(log.id, role, e.target.value || undefined);
-      }}
-    >
-      <option value="">— not found —</option>
-      {candidates.map((c) => (
-        <option key={c} value={c}>
-          {c}
-        </option>
-      ))}
-      {current && !candidates.includes(current) && <option value={current}>{current}</option>}
-      <option value="__custom">Other key…</option>
-    </select>
   );
 }

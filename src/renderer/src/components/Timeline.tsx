@@ -15,7 +15,8 @@
  * to the whole log; its label at the left says which and switches on click.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { sessionStore, matchExtent, nudgeLog, removeBookmark, removeTimelineTrack, type LogEntry, type SessionState } from '../state/session';
+import { sessionStore, matchExtent, nudgeLog, removeBookmark, removeTimelineTrack, addTimelineTrack, type LogEntry, type SessionState } from '../state/session';
+import { dragStore, hasFieldDrag, readFieldDrag } from '../lib/dnd';
 import {
   timeStore,
   setCursor,
@@ -87,6 +88,9 @@ function trackLabel(key: string): string {
   return cam ? `${cam[1]} tags` : shortKey(key, 2);
 }
 
+/** The kinds of field a timeline track can show. */
+const TRACK_KINDS = ['boolean', 'string', 'number'];
+
 export function Timeline() {
   const mode = useStore(sessionStore, (s) => s.timelineMode);
   const custom = useStore(sessionStore, (s) => s.timelineHeight);
@@ -120,6 +124,20 @@ export function Timeline() {
     el.addEventListener('pointerup', up);
   };
 
+  // a field dropped on the timeline becomes a track (true/false, text or number fields)
+  const canTrack = useStore(dragStore, (st) => !!st.items?.some((f) => TRACK_KINDS.includes(f.kind)));
+  const onTrackDragOver = (e: React.DragEvent) => {
+    if (!hasFieldDrag(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  };
+  const onTrackDrop = (e: React.DragEvent) => {
+    const items = readFieldDrag(e)?.filter((f) => TRACK_KINDS.includes(f.kind));
+    if (!items?.length) return;
+    e.preventDefault();
+    for (const f of items) addTimelineTrack(f.key);
+  };
+
   return (
     <div className={`timeline ${mode}`}>
       <div
@@ -129,7 +147,14 @@ export function Timeline() {
         title="Drag to resize the timeline · double-click for automatic height"
       />
       <Transport />
-      <div className="canvas-host" style={{ height }} data-testid="timeline-canvas">
+      <div
+        className={`canvas-host${canTrack ? ' drop-lit' : ''}`}
+        style={{ height }}
+        data-testid="timeline-canvas"
+        onDragEnter={onTrackDragOver}
+        onDragOver={onTrackDragOver}
+        onDrop={onTrackDrop}
+      >
         <canvas ref={ref} />
       </div>
     </div>

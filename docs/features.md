@@ -60,7 +60,7 @@ Last brought up to date: 2026-11-17 (after pull request #14).
 1. **Open all the matches** (Ctrl+O, pick several, or drop them in). Each gets its own color, shown on its chip in the header.
 2. **Line them up:** **Align** in the header, **Auto start** (the default) puts t = 0 at the start of auto in every log. To fix a small offset by eye, **Alt-drag that log's lane** on the timeline.
 3. **Pick the layout:** Preset, **Compare Matches** gives:
-   - **Compare matches table:** one row per log: event, match, alliance, auto routine, code version, time enabled, minimum and average voltage, brownouts, peak current, energy, battery resistance, loop overruns, errors, position vs vision findings, path errors. Click a value to go to that moment. **Add field** adds min, mean and max columns for any number, over enabled, auto, teleop or the whole log;
+   - **Compare matches table:** one row per log: event, match, alliance, auto routine, code version, time enabled, minimum and average voltage, brownouts, peak current, energy, battery resistance, loop overruns, errors, position vs vision findings, path errors. Click a value to go to that moment. **+ Field** (under its tab) adds min, mean and max columns for any number, over enabled, auto, teleop or the whole log;
    - **an overlaid battery graph:** every log on the same axes, in its own color;
    - **the 2D field** with every log's robot, and a long trail so whole paths overlay;
    - **voltage statistics** per log.
@@ -100,7 +100,7 @@ Last brought up to date: 2026-11-17 (after pull request #14).
 
 1. **Add panel**, Commands.
 2. Every command that ran is a row; each run is a bar on that row, one lane per log. Hover a bar for its start and length; **click it to go there**. Commands running at the cursor light up (tinted row, bold name, how long it has run), and one that just started flashes. **Click a name** to go to that command's next run (Shift+click: the one before).
-3. **No commands shown?** The robot code must record them. Section 8, Commands has the two ways, with code. You never add fields to this panel by hand: it finds the command list itself. Its **Source field** button is only for a log that keeps the list under an unusual name.
+3. **No commands shown?** The robot code must record them. Section 8, Commands has the two ways, with code. You never add fields to this panel by hand: it finds the command list itself. The field box under its tab is only for a log that keeps the list under an unusual name.
 
 ### 2.8 Check the driver's inputs (the Controller panel)
 
@@ -197,24 +197,39 @@ The timeline is the only thing that moves time: the cursor, the visible range an
 
 ## 6. The field list (sidebar)
 
-- **Search:** words narrow by name (every word must appear). Results that sit in the same folder are boxed together under that folder, shown once, and each row shows only the rest of its name: the part that tells them apart. A result alone in its folder shows the folder dimmed in front of its name.
+- **Search:** words narrow by name (every word must appear). Results that sit in the same folder are boxed together under that folder, shown once, and each row shows only the rest of its name: the part that tells them apart. No folder is shown twice: results in neighboring folders (`Drive/Module0/Speed`, `Drive/Module1/Speed`) share one box under the folder they have in common (`Drive/`), each row with its own folder dimmed; a folder with many results gets its own box inside the shared one, headed by only the rest of its name (`ChannelCurrent/` inside `/PowerDistribution/`). A result alone in its folder shows the folder dimmed in front of its name. The lists under field boxes and the In panels sections group the same way (In panels keeps each panel's order).
 - **Filter by type, by typing:** start typing a type that exists in your logs (`Pose2d`, `boolean`, `number`, `SwerveModuleState[]`, ...). The rest of it shows faintly with a **Tab** hint. Press **Tab** and it becomes a type chip, then keep typing:
   - more types (Tab again) list fields of **any** of them;
   - words narrow by name;
   - **Backspace** on an empty search removes the last type; **Esc** clears it all; each chip has its own remove button.
 - **Select:** click one field; **Ctrl-click** adds or removes one; **Shift-click** selects a range. The bar that appears adds the selection to the active panel, or opens it in a new panel.
-- **Drag** a field, or the whole selection, onto a panel to add it. The panel says what it could not show. **Drag a folder** to add every field in it. **Drop on an empty spot** in the grid and Brownout picks the right panel: positions go to a 2D field, numbers to a graph, and so on.
+- **Drag** a field, or the whole selection, onto a panel to add it. While you drag, every panel and field box that can take it lights up, and a graph splits into its left and right axis: drop on a half to put the field on that axis. The panel says what it could not show. **Drag a folder** to add every field in it. **Drop on an empty spot** in the grid and Brownout picks the right panel: positions go to a 2D field, numbers to a graph, and so on. **Drop on the timeline** to add a track.
 - **Double-click** a field to add it to the active panel.
 - **Star** a field to make it a favorite. Favorites sit at the top and are saved in the robot profile.
 - **"Add as a timeline track"** button on a field row.
 - **`{}` button:** shows or hides the fields Brownout made itself (`/Brownout/...`) and the parts of structs and arrays.
-- **Badges** show each field's type and unit; colored dots show which open logs have it.
+- **Badges** show each field's type and unit; colored dots show which open logs have it. **Numbered squares** show which panels it is in (the number and color match the panel's tab).
+- **Point at a field** and the panels showing it light up, and in a graph its line is drawn bolder. **Point at a panel's tab** (or a chip under it) and its fields light up in the list.
+- **In panels** (next to the search): the list becomes a preview of what the panels show. One section per area of the grid, for the panel in front there (switch a tab and its section follows), each scrolling on its own. Panels that never show a field (Console & events, Log info) get no section, nor does Commands while it finds its list by itself. **Click a section's header** to minimize it to that line (with how many fields it holds), and again to bring it back; the others share the room, and it is remembered. Each field is drawn the way its panel draws it (a graph's line and axis, the 2D field's robot or camera) with its value at the cursor for every log; a pose shows x, y and its heading on one line. A field in two panels is in both sections. The search narrows the sections too. While it is on, the strips under the panels' tabs are hidden, and each section edits its panel instead: **+ Field** at the end of a section adds one (an empty Statistics panel has its field box there), a row's remove button takes it out, **L** / **R** switches a graph line's axis, and a row of the 2D field's robot, path or cameras opens Robot setup. Rows drag like the field list's: drop one on another section to add it there, on a row to swap that field, or on a row's top or bottom edge to put it just above or below (to reorder a panel). Click In panels again for the normal list and the strips; it is remembered.
 - **Inspector** (bottom of the sidebar): the selected fields' values at the cursor, per log, with structs expanded. **Click a value to copy it** (in full, not rounded); click a field's name to copy the name.
 - **Width:** drag the sidebar's right edge to make it wider (remembered); double-click the edge for the default width.
+
+### Field boxes
+
+Everywhere Brownout asks for a field (Robot setup, Log info's field names, the strips under the panels' tabs) it uses the same box. Its label says what it is for, with the types it takes on the right (`Pose2d`, `number[]`).
+
+- **Drop** a field from the list on it, or **click it and type**: the rest of a matching name shows faintly and **Tab** takes it. The list under the box shows only the fields that fit, grouped by folder; arrows and Enter pick, Esc closes.
+- While you drag, every box that can take the field lights up, and the box under the pointer shows the field it would hold.
+- A box that **can't take** a field turns red and says why ("Takes number[]; Drive/Pose is Pose2d"); dropping or tabbing onto it makes it shake and it keeps its field. After a wrong Tab the list stays open with what fits.
+- A **yellow outline** means the field is not in the open logs; rest the pointer on it to see which.
+- A field you picked has a clear button on hover, which goes back to what Brownout finds by name. Ctrl+Z undoes a drop.
+- Where a panel takes several fields, they are **chips with + Field** at the end: drop on a chip to **swap** that field (it keeps its line and axis), on a chip's edge to **add it beside** (a line marks the spot), on + Field to add it at the end; or click + Field and type.
 
 ## 7. Panels and the grid (the Panels view)
 
 - **Add panel** (header) adds any panel type. New panels open as tabs in the active group.
+- **Panel numbers:** each panel's tab starts with its number in a colored square, counted in reading order. The field list shows the same squares next to each field the panel shows.
+- **The strip under a tab** lists the panel's fields: chips with the line each is drawn with (and **L** or **R** for a graph's axis; click it to switch), and **+ Field**. Panels that show one field (Statistics, Commands) have one field box there instead. The 2D field's strip starts with what it draws from the robot profile (robot, path, cameras): click one to change it in Robot setup. While the field list shows **In panels** the strips are hidden: the sections there list and edit the same fields.
 - **Arrange:** drag a panel's tab onto another panel's edge to split it, or onto its tabs to stack it. Drag the borders between panels to resize them.
 - **Maximize one panel:** the button at its top right (it shows on hover), **double-click its tab**, or **Ctrl+Enter**. The same again restores it. The timeline stays visible, and maximizing never marks a preset as changed.
 - **Copy a panel as a picture:** the picture button at its top right, or Ctrl+Shift+C for the active panel. **Shift-click** the button to save a PNG instead.
@@ -249,7 +264,7 @@ Any panel that lacks what it needs says so and how to log it, and Log info & hea
 - **For:** any number over time, for one log or several: voltage, current, speeds, setpoint against measured.
 - **Needs:** any number fields (or on/off and state fields, drawn as lanes under the plot).
 - **Use:**
-  - **Field** adds fields (or drag them in). Each field's chip switches it between the **left and right axis**, or removes it. **Clear** removes them all;
+  - the strip under its tab lists the fields: **+ Field** adds one (or drag them in; drop on the plot's left or right half for that axis). Each chip's **L** / **R** switches its axis; drop on a chip to swap it. **Clear** removes them all;
   - **comparing logs:** **Overlay** (default), **Stacked** (a lane per log), or **Difference** (A minus B, the first two logs). The log menu picks all logs or one;
   - **Modes** shades auto and teleop; **Threshold** adds horizontal lines (e.g. the brownout voltage);
   - **Linked** (on) follows the timeline. Turn it off and the graph keeps its own time range: the wheel zooms that graph's time only;
@@ -259,7 +274,7 @@ Any panel that lacks what it needs says so and how to log it, and Log info & hea
 ### Table
 - **For:** exact values: what a field changed to and when, or every chosen field's value at the cursor.
 - **Needs:** any fields.
-- **Use:** add fields with **Field**. **Changes** lists every change within the visible range (it updates when you stop moving); **Values at cursor** shows each field's value right now. One column per log.
+- **Use:** add fields with **+ Field** under its tab (or drag them in). **Changes** lists every change within the visible range (it updates when you stop moving); **Values at cursor** shows each field's value right now. One column per log.
 
 ### Console & events
 - **For:** what the robot printed, its alerts and warnings, and the events Brownout found, in time order.
@@ -276,7 +291,7 @@ Any panel that lacks what it needs says so and how to log it, and Log info & hea
 - **Use:**
   - **the field picture:** the real 2024 to 2026 fields, or your own from a WPILib or PathWeaver field JSON (Display menu); the season is picked in the toolbar;
   - **robots:** one per log, sized from the robot profile, bumpers in the alliance color, with a trail (the trail menu sets how long). The robot's parts from the robot editor turn with their logged angles;
-  - **Pose field** adds other positions (a vision estimate, a setpoint), drawn as labeled ghosts;
+  - **+ Field** under its tab adds other positions (a vision estimate, a setpoint), drawn as labeled ghosts;
   - **zoom and pan:** the wheel zooms (also out past the field), a drag pans (also off the field), double-click or **Fit** shows the whole field again. The view never zooms or recenters by itself;
   - **Display menu:**
     - field picture and its brightness;
@@ -327,7 +342,7 @@ Any panel that lacks what it needs says so and how to log it, and Log info & hea
   - each command's total time and run count, when it is not running;
   - **Filter commands** in the toolbar keeps only the commands whose names contain what you type;
   - with several logs, a line on top tells the lanes apart and says how many commands each log runs at the cursor;
-  - **Source field** in its toolbar is only for a log that keeps the list under another name: pick a text-list (`string[]`) field. The small remove button next to a picked field goes back to finding it automatically. When it found the list itself, the toolbar says where from ("from Scheduler/Names").
+  - the field box under its tab shows where the list comes from. Drop a text-list (`string[]`) field on it only for a log that keeps the list under another name; its clear button goes back to finding it automatically.
 
 ### Video
 - **For:** the match video, following the timeline. Also the left side of the Video review view.
@@ -336,7 +351,7 @@ Any panel that lacks what it needs says so and how to log it, and Log info & hea
 
 ### Statistics
 - **For:** how one number was spread: typical, worst, how often.
-- **Needs:** one number field (**Choose the field**).
+- **Needs:** one number field (the box under its tab).
 - **Use:**
   - pick the time it covers: the visible range, the selection, enabled time, auto, teleop or the whole log;
   - a histogram, plus samples, min, max, mean (plain and time-weighted), median, 5th and 95th percentiles, standard deviation, first and last;
@@ -365,7 +380,7 @@ Any panel that lacks what it needs says so and how to log it, and Log info & hea
 ### Compare matches
 - **For:** one table of numbers across every open log, to see which match was different.
 - **Needs:** nothing extra; each column fills in if the log has the data.
-- **Use:** see section 2.3. Click a value to go there; **Add field** adds min, mean and max of any number over enabled, auto, teleop or the whole log; a button makes a log the reference.
+- **Use:** see section 2.3. Click a value to go there; **+ Field** adds min, mean and max of any number over enabled, auto, teleop or the whole log; a button makes a log the reference.
 
 ### Log info & health
 - **For:** what is in a log and what it lacks.
@@ -373,7 +388,7 @@ Any panel that lacks what it needs says so and how to log it, and Log info & hea
   - the file, duration, records, era, loggers, event and match, alliance, auto routine, wall clock, where robot state was read from, first enable and auto start;
   - the alignment offset and a typed **nudge**;
   - **logging health:** every signal Brownout recommends, with a check or a cross, why it matters and how to log it;
-  - **Field names:** which field Brownout uses for each role (battery voltage, robot pose, swerve states, ...). Pick a different one if it guessed wrong; it is saved in the robot profile for every log from that robot.
+  - **Field names:** which field Brownout uses for each role (battery voltage, robot pose, swerve states, ...), in field boxes grouped like Robot setup's. Drop or type the right one if it guessed wrong; it is saved in the robot profile for every log from that robot.
 
 ## 9. The views (header switch, or Ctrl+1, 2, 3, 4)
 
@@ -479,8 +494,8 @@ A preset says where panels go; a **robot profile** describes the robot and appli
 | field     |   the 2D field                   | profile: My robot    |
 | list      |     [robot] ---- tag 12          | On the field | Robot |
 | (drag     |                                  | Cameras | Power ...  |
-|  from     |   drop a field here: what is it? | Robot pose (found by |
-|  here)    |                                  |  name) ...           |
+|  from     |   drop a field here: what is it? | Robot pose  Pose2d   |
+|  here)    |                                  | [Odometry/Robot    ] |
 +-----------+----------------------------------+----------------------+
 | timeline                                                            |
 +---------------------------------------------------------------------+
@@ -493,20 +508,20 @@ A preset says where panels go; a **robot profile** describes the robot and appli
   - a number (an angle): **turns a part of the robot** (one of the parts, or a new bar at the center); radians, degrees or rotations are guessed from the name;
   - swerve module states (measured or setpoints) and chassis speeds.
   The answer goes into the profile, so every log from this robot follows, and the field shows it at once. The first camera you drop keeps the cameras Brownout found by name.
-- **On the field** (tab): what the field shows and where each piece comes from, **found by name** or **set here**; Clear goes back to finding it by name. The cameras with their fields, and the parts that turn.
+- **On the field** (tab): a field box for everything the field shows: the robot pose, path, target and vision estimate, swerve states and chassis speeds; each camera's estimate, tag IDs and tag positions, and **Add a camera** (drop any camera field on it to make a new camera); each part's angle, and **Add a turning part**. Drop on the box, or click it and type (see Field boxes in section 6).
 - **Profile** (top): which profile is shown; its menu makes a new one, duplicates, renames, exports, imports or deletes. It says which open logs use it, and warns when the profile names fields the open logs do not have.
 - **Robot** (tab): **size** with bumpers (no upper limit), **Edit the parts** (the robot editor, below), **swerve module order and full-scale speed**;
 - **Cameras** (tab): the camera editor, below;
 - **Power** (tab): the power subsystems, below;
-- **Field names** (tab): every field picked by hand instead of by name, with Pick again and Clear;
+- **Field names** (tab): every field Brownout looks for by name, in folding groups (Power, Code and health, On the field), each a field box showing what it found. Drop or type the right field on a wrong guess; the clear button goes back to finding it by name;
 - **Logs** (tab): which profile each open log uses (chosen per log and remembered per file; otherwise the best match of field names, else the last one used; several profiles are fine, for a practice robot), and the **favorite fields**;
 - the **controller layout** is set in the Controller panel;
 - **power subsystems** (subsystem editor):
   - **Suggest** groups motor currents by folder (`Subsystems/Elevator/...` becomes Elevator), preferring supply over stator current;
-  - assign PDH or PDP channels (each shows its peak current) or logged current fields;
+  - assign PDH or PDP channels (each shows its peak current) or logged current fields (chips with + Field; a field moves from another subsystem);
   - "Unassigned" is the total minus everything assigned;
   - fields that look like stator current get a warning;
-- **cameras** (camera editor): a name plus any of three fields (pose estimate, tag IDs, tag poses) and where it is mounted. "Copy the cameras found" turns the detected ones into an editable list;
+- **cameras** (camera editor): a name plus any of three field boxes (estimate, tag IDs, tag positions) and where it is mounted. "Copy the cameras found" turns the detected ones into an editable list;
 - **robot appearance** (robot editor, also from the field's Display menu):
   - **parts:** rectangles, ellipses, pictures and SVGs (pictures up to 512 px, SVGs up to 300 kB, kept inside the profile); place them by typing or by dragging in the preview; order, opacity and color; up to 24 parts;
   - **turning with a logged angle:** link a part to a logged angle (radians, degrees or rotations, reversed, a zero offset);

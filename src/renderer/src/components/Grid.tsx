@@ -3,7 +3,14 @@
  * their settings from panelStore by panel id; dockview only stores the id.
  */
 import { useCallback, useRef } from 'react';
-import { DockviewReact, type DockviewReadyEvent, type IDockviewPanelProps, type IWatermarkPanelProps } from 'dockview-react';
+import {
+  DockviewReact,
+  DockviewDefaultTab,
+  type DockviewReadyEvent,
+  type IDockviewPanelProps,
+  type IDockviewPanelHeaderProps,
+  type IWatermarkPanelProps,
+} from 'dockview-react';
 import { themeDark, themeLight, type DockviewApi, type SerializedDockview, type AddPanelOptions } from 'dockview';
 import {
   panelStore,
@@ -14,6 +21,7 @@ import {
   addFieldToPanel,
   addFieldsToPanel,
   panelTypeForField,
+  panelAccepts,
   PANEL_TITLES,
   type PanelType,
   type PanelSettings,
@@ -35,7 +43,8 @@ import { PowerPanel } from '../panels/PowerPanel';
 import { PathsPanel } from '../panels/PathsPanel';
 import { ComparePanel } from '../panels/ComparePanel';
 import { InfoPanel } from '../panels/InfoPanel';
-import { hasFieldDrag, readFieldDrag, type FieldDrag } from '../lib/dnd';
+import { hasFieldDrag, readFieldDrag, dragStore, type FieldDrag } from '../lib/dnd';
+import { gridStore, linkStore, pointAtPanel, panelColorVar, shownKeys, type GridArea } from '../lib/panelLinks';
 import { runAction } from '../lib/actions';
 import { sessionStore } from '../state/session';
 import { useStore } from '../state/store';
@@ -127,6 +136,52 @@ export const grid = {
   },
 };
 
+/** Number the panels in reading order and note the panel in front in each area (lib/panelLinks.ts). */
+let refreshQueued = false;
+function refreshGrid(): void {
+  if (refreshQueued) return;
+  refreshQueued = true;
+  requestAnimationFrame(() => {
+    refreshQueued = false;
+    // one panel fills the grid: the others are hidden and have no place to read; keep the numbers
+    if (!api || api.hasMaximizedGroup()) return;
+    const groups = api.groups.map((g) => ({ g, r: g.element.getBoundingClientRect() }));
+    groups.sort((a, b) => (Math.abs(a.r.top - b.r.top) > 4 ? a.r.top - b.r.top : a.r.left - b.r.left));
+    const areas: GridArea[] = groups.map(({ g }) => ({ panels: g.panels.map((p) => p.id), front: g.activePanel?.id ?? null }));
+    const cur = gridStore.get();
+    if (JSON.stringify(cur.areas) === JSON.stringify(areas)) return;
+    gridStore.set({ order: areas.flatMap((a) => a.panels), areas });
+  });
+}
+
+/** A panel's tab: its number in a square of its color, then dockview's own tab (title, close). */
+function PanelTab(props: IDockviewPanelHeaderProps) {
+  const id = props.api.id;
+  const n = useStore(gridStore, (s) => s.order.indexOf(id) + 1);
+  // lit while the pointer is on a field this panel shows
+  const lit = useStore(linkStore, (s) => {
+    if (!s.key || s.panel === id) return false;
+    const ps = panelStore.get().panels[id];
+    return !!ps && shownKeys(ps, sessionStore.get().logs).includes(s.key);
+  });
+  return (
+    <div
+      className={`panel-tab${lit ? ' linked' : ''}`}
+      onMouseEnter={() => pointAtPanel(id)}
+      onMouseLeave={() => pointAtPanel(null)}
+      data-testid="panel-tab"
+      data-n={n || undefined}
+    >
+      {n > 0 && (
+        <span className="pn" style={{ background: panelColorVar(n) }}>
+          {n}
+        </span>
+      )}
+      <DockviewDefaultTab {...props} />
+    </div>
+  );
+}
+
 function wrap(Comp: React.FC<{ id: string }>): React.FC<IDockviewPanelProps> {
   return function Wrapped(props: IDockviewPanelProps) {
     return <PanelFrame id={props.api.id} Comp={Comp} />;
@@ -141,11 +196,22 @@ function PanelFrame({ id, Comp, standalone }: { id: string; Comp: React.FC<{ id:
   const maximized = useStore(maximizedStore, (s) => s.maximized);
   const ref = useRef<HTMLDivElement>(null);
   const compact = useCompactWidth(ref, COMPACT_BELOW);
+  const canTake = useStore(dragStore, (s) => {
+    const t = panelStore.get().panels[id]?.type;
+    return !!s.items && !!t && panelAccepts(t, s.items[0].kind, s.items[0].structName);
+  });
+  const linked = useStore(linkStore, (s) => {
+    if (!s.key || s.panel === id) return false;
+    const ps = panelStore.get().panels[id];
+    return !!ps && shownKeys(ps, sessionStore.get().logs).includes(s.key);
+  });
   const onDragOver = useCallback((e: React.DragEvent) => {
     if (!hasFieldDrag(e)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
-    (e.currentTarget as HTMLElement).classList.add('drop-target');
+    const el = e.currentTarget as HTMLElement;
+    el.dataset.drop = dragStore.get().items?.[0]?.key ?? '';
+    el.classList.add('drop-target');
   }, []);
   const onDragLeave = useCallback((e: React.DragEvent) => {
     (e.currentTarget as HTMLElement).classList.remove('drop-target');
@@ -165,7 +231,15 @@ function PanelFrame({ id, Comp, standalone }: { id: string; Comp: React.FC<{ id:
   );
   if (!has) return <div className="panel-missing">Panel settings missing</div>;
   return (
-    <div className={`panel-frame${compact ? ' compact' : ''}`} ref={ref} data-panel={id} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
+    <div
+      className={`panel-frame${compact ? ' compact' : ''}${canTake ? ' drop-lit' : ''}${linked ? ' linked' : ''}`}
+      ref={ref}
+      data-panel={id}
+      onDragEnter={onDragOver}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
       <CompactContext.Provider value={compact}>
         <Comp id={id} />
       </CompactContext.Provider>
@@ -279,7 +353,17 @@ export function Grid() {
     e.api.onDidLayoutChange(() => {
       for (const l of layoutListeners) l();
     });
-    e.api.onDidMaximizedGroupChange(() => maximizedStore.set({ maximized: e.api.hasMaximizedGroup() }));
+    e.api.onDidMaximizedGroupChange(() => {
+      maximizedStore.set({ maximized: e.api.hasMaximizedGroup() });
+      refreshGrid();
+    });
+    e.api.onDidLayoutChange(refreshGrid);
+    e.api.onDidAddPanel(refreshGrid);
+    e.api.onDidRemovePanel(refreshGrid);
+    e.api.onDidMovePanel(refreshGrid);
+    e.api.onDidActivePanelChange(refreshGrid);
+    e.api.onDidActiveGroupChange(refreshGrid);
+    refreshGrid();
   }, []);
   // Double-click a panel's tab to let it fill the grid, and again to put it back.
   const onDoubleClick = useCallback((e: React.MouseEvent) => {
@@ -289,7 +373,13 @@ export function Grid() {
   }, []);
   return (
     <div className="grid-host" onDoubleClick={onDoubleClick}>
-      <DockviewReact components={components} watermarkComponent={Watermark} onReady={onReady} theme={theme === 'light' ? themeLight : themeDark} />
+      <DockviewReact
+        components={components}
+        defaultTabComponent={PanelTab}
+        watermarkComponent={Watermark}
+        onReady={onReady}
+        theme={theme === 'light' ? themeLight : themeDark}
+      />
     </div>
   );
 }

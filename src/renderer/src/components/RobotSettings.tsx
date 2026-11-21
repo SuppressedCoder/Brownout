@@ -26,8 +26,8 @@ import { useStore } from '../state/store';
 import { askText, confirmDialog, toast, uiStore } from '../state/ui';
 import { MenuButton, MenuItem, MenuSeparator } from './Menu';
 import { saveText, pickJson } from '../lib/persist';
-import { ROLE_LABELS, type Role } from '@core/roles';
-import { FieldPicker } from './FieldPicker';
+import { ROLE_LABELS, ROLE_GROUPS, roleTypes, type Role } from '@core/roles';
+import { FieldSlot } from './FieldSlot';
 import { Icon } from './Icon';
 import { shortKey } from '../lib/fields';
 
@@ -262,43 +262,56 @@ export function RobotSection({ profile }: { profile: RobotProfile }) {
   );
 }
 
-/** The fields Brownout found by name, corrected by hand. */
-export function NamesSection({ profile }: { profile: RobotProfile }) {
+/** The field playing a role for this robot: what Brownout finds by name, or the one you picked (with a clear button). */
+export function RoleSlot({ profile, role }: { profile: RobotProfile; role: Role }) {
   const logs = useStore(sessionStore, (s) => s.logs);
-  const [pickRole, setPickRole] = useState<Role | null>(null);
-  const missing = missingKeys(profile, logs);
-  const isMissing = (k: string) => missing.includes(k);
+  const mine = logs.filter((l) => l.profileId === profile.id);
+  const own = profile.roleOverrides[role];
+  const found = mine.map((l) => l.roles[role]).find(Boolean);
   return (
-    <div>
-      <div className="setting-help">
-        Brownout finds battery voltage, robot pose and the like by name. When it picks the wrong field, correct it here (or drop the right one on the field) and
-        every log from this robot follows.
-      </div>
-      {Object.entries(profile.roleOverrides).length === 0 && <div className="setting-help">No corrections. Everything is found automatically.</div>}
-      {(Object.entries(profile.roleOverrides) as [Role, string][]).map(([role, key]) => (
-        <div className="setting-row plain" key={role}>
-          <span>
-            <span className="setting-label">{ROLE_LABELS[role]}</span>
-            <span className={`setting-help mono${isMissing(key) ? ' warn-text' : ''}`}>
-              {isMissing(key) && <Icon name="warning" size={11} />} {key}
-              {isMissing(key) ? ' (not in the open logs)' : ''}
-            </span>
-          </span>
-          <button className="btn small" onClick={() => setPickRole(role)}>
-            Pick again
-          </button>
-          <button className="btn small" onClick={() => void setProfileRole(profile.id, role, undefined)} title="Go back to finding this field automatically">
-            Clear
-          </button>
-        </div>
-      ))}
-      {pickRole && (
-        <FieldPicker
-          title={`Field for: ${ROLE_LABELS[pickRole]}`}
-          onClose={() => setPickRole(null)}
-          onPick={(key) => void setProfileRole(profile.id, pickRole, key)}
-        />
-      )}
+    <FieldSlot
+      label={ROLE_LABELS[role]}
+      spec={{ types: roleTypes(role) }}
+      value={own ?? found}
+      logs={mine}
+      onPick={(key) => void setProfileRole(profile.id, role, key)}
+      onClear={own ? () => void setProfileRole(profile.id, role, undefined) : undefined}
+      testId={`role-${role}`}
+    />
+  );
+}
+
+/** Every field Brownout looks for by name, in folding groups; drop or type the right one on a wrong guess. */
+export function NamesSection({ profile }: { profile: RobotProfile }) {
+  const [shut, setShut] = useState<Set<string>>(() => new Set(ROLE_GROUPS.slice(1).map((g) => g.title)));
+  const toggle = (t: string) =>
+    setShut((s) => {
+      const n = new Set(s);
+      if (n.has(t)) n.delete(t);
+      else n.add(t);
+      return n;
+    });
+  return (
+    <div className="role-groups" data-testid="field-names">
+      {ROLE_GROUPS.map((g) => {
+        const open = !shut.has(g.title);
+        return (
+          <div className="role-group" key={g.title}>
+            <button className="role-group-head" onClick={() => toggle(g.title)} aria-expanded={open} data-testid="role-group">
+              <Icon name={open ? 'chevronDown' : 'chevronRight'} size={10} />
+              <span>{g.title}</span>
+              <span className="count">{g.roles.length}</span>
+            </button>
+            {open && (
+              <div className="slot-stack">
+                {g.roles.map((r) => (
+                  <RoleSlot key={r} profile={profile} role={r} />
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
