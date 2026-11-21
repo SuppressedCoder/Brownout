@@ -3086,8 +3086,13 @@ h4 {
 .fchip {
   position: relative;
   max-width: 100%;
+  min-width: 0;
   font-family: var(--mono);
   cursor: default;
+}
+.fchip .fkey {
+  /* a long key loses the start of its folder first */
+  min-width: 0;
 }
 .fchip .fkey-leaf {
   font-weight: 600;
@@ -3153,10 +3158,13 @@ h4 {
 .field-strip {
   flex: none;
   display: flex;
-  align-items: center;
+  /* safe: chips taller than the strip scroll from their first row instead of overflowing upward */
+  align-items: safe center;
   gap: 4px;
   min-width: 0;
   max-height: 56px;
+  /* chips wrap; a strip never scrolls sideways */
+  overflow-x: hidden;
   overflow-y: auto;
   padding: 3px 6px;
   border-bottom: 1px solid var(--line);
@@ -3164,6 +3172,7 @@ h4 {
 }
 .field-strip .flist {
   flex: 1;
+  min-width: 0;
 }
 .field-strip .fchip {
   font-size: 11px;

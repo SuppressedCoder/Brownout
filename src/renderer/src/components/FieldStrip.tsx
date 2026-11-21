@@ -116,20 +116,6 @@ export function PanelFieldStrip({ id }: { id: string }) {
     const auto = s.type === 'field' ? shownKeys(s, logs).filter((k) => !keys.includes(k)) : [];
     return (
       <StripRow>
-        {auto.map((k) => (
-          <span
-            key={k}
-            className="chip fchip fixed"
-            title={`${k}
-From the robot profile; click to change it in Robot setup`}
-            onMouseEnter={() => pointAtField(k, id)}
-            onMouseLeave={() => pointAtField(null)}
-            onClick={() => (uiStore.set({ setupTab: 'field' }), showView('robot'))}
-            data-testid="fchip-auto"
-          >
-            <KeyText k={k} />
-          </span>
-        ))}
         <FieldList
           items={keys.map((key) => ({ key }))}
           spec={spec}
@@ -146,6 +132,26 @@ From the robot profile; click to change it in Robot setup`}
           onReplace={(at, f) => set(replaceKey(keys, at, f.key))}
           onRemove={(i) => set(keys.filter((_, j) => j !== i))}
           testId="strip-list"
+          lead={
+            auto.length > 0 && (
+              <>
+                {auto.map((k) => (
+                  <span
+                    key={k}
+                    className="chip fchip fixed"
+                    title={`${k}
+From the robot profile; click to change it in Robot setup`}
+                    onMouseEnter={() => pointAtField(k, id)}
+                    onMouseLeave={() => pointAtField(null)}
+                    onClick={() => (uiStore.set({ setupTab: 'field' }), showView('robot'))}
+                    data-testid="fchip-auto"
+                  >
+                    <KeyText k={k} />
+                  </span>
+                ))}
+              </>
+            )
+          }
         />
       </StripRow>
     );

@@ -475,6 +475,7 @@ export function FieldList({
   addLabel = 'Field',
   panel,
   className = '',
+  lead,
 }: {
   items: FieldListItem[];
   spec?: FieldSpec;
@@ -489,6 +490,8 @@ export function FieldList({
   /** The panel the list belongs to: pointing at a chip lights its field in the field list (and its line). */
   panel?: string;
   className?: string;
+  /** Chips shown first that are not part of the list (the 2D field's robot, path and cameras); they wrap with it. */
+  lead?: ReactNode;
 }) {
   const linked = useStore(linkStore, (s) => (s.panel === panel ? null : s.key));
   const allLogs = useStore(sessionStore, (s) => s.logs);
@@ -573,6 +576,7 @@ export function FieldList({
       onDragLeave={leave}
       onDrop={(e) => drop(e, items.length, 'add')}
     >
+      {lead}
       {items.map((it, i) => {
         const miss = missingFrom(it.key, logs);
         const swapping = over && over.mode === 'swap' && over.at === i;
