@@ -104,6 +104,10 @@ export interface VideoSettings {
   type: 'video';
   /** Log this panel's video belongs to; empty = the primary log. */
   logId?: string;
+  /** View: 1 = the whole picture (lib/zoomPan.ts). */
+  zoom?: number;
+  /** View: the point of the picture at the panel's middle, as fractions of it; undefined = the middle. */
+  center?: [number, number];
 }
 export interface SwerveSettings {
   type: 'swerve';

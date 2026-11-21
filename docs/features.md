@@ -348,6 +348,7 @@ Any panel that lacks what it needs says so and how to log it, and Log info & hea
 - **For:** the match video, following the timeline. Also the left side of the Video review view.
 - **Needs:** a video file (MP4 with H.264, or WebM); nothing in the log.
 - **Use:** Choose video, then sync it once. Section 11 has the whole of it.
+- **Zoom in on the picture** like the 2D field: the wheel zooms around the pointer, drag to move it (also past the edges), and **Fit** or a double-click shows the whole picture again. The zoom is kept with the panel; it never changes by itself.
 
 ### Statistics
 - **For:** how one number was spread: typical, worst, how often.
@@ -461,6 +462,7 @@ Preset and Add panel only show in the Panels view. The views' own panels are nev
 **Syncing: the sync view** (opens after choosing a video, or Sync menu, "Open the sync view"):
 
 - **Video controls of its own:** Play at 0.25x, 0.5x or 1x (Space); Left/Right one frame; Shift+Left/Right one second; comma and period five seconds; a box to type a video time; sound on or off (the start horn and the teleop bell help).
+- **Zoom in on the picture** (to read a robot's bumpers or the field lights): the wheel on the video zooms around the pointer, drag to move it, **Fit** or a double-click for the whole picture.
 - **The video timeline:**
   - press or drag to move through the video;
   - **scroll the wheel to zoom in down to single numbered frames**, then click one to show it;
@@ -624,6 +626,7 @@ A preset says where panels go; a **robot profile** describes the robot and appli
 | Graph | double-click | back to auto-fit |
 | Graph | click the legend strip | open the full legend |
 | 2D field | wheel / drag / double-click | zoom / pan / fit (zoom out and pan past the field freely) |
+| Video (panel and sync view) | wheel / drag / double-click on the picture | zoom / pan / fit, like the 2D field |
 | Commands | click a run | go to where it started |
 | Console, Compare, Statistics, Power, Moments | click a line or value | go to that moment |
 | Robot editor | drag the round marker (Alt-drag when it sits at the part's center) | move the pivot |

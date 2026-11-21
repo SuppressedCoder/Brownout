@@ -35,6 +35,7 @@ export function Help() {
     ['Graph: double-click', 'Back to auto-fit'],
     ['Graph: Shift+drag', 'Select a time range'],
     ['2D field: wheel / drag / double-click', 'Zoom / pan / fit (free: zoom out and pan past the field)'],
+    ['Video: wheel / drag / double-click on the picture', 'Zoom / pan / fit, like the 2D field (also in the sync view)'],
     ['2D field: Display', 'Field picture, camera lines to AprilTags, tags-seen tracks; hide robot names, all parts or single parts'],
     [
       'Video: Sync, Open the sync view',
