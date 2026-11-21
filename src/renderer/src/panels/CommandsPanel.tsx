@@ -33,7 +33,7 @@ import { drawCursor, drawTimeAxis, fitText } from '../lib/draw';
 import { Toolbar, ToolSelect, ToolInput } from '../components/Toolbar';
 import { FieldSlot, KeyText } from '../components/FieldSlot';
 import type { FieldSpec } from '../lib/fields';
-import { StripRow } from '../components/FieldStrip';
+import { StripRow, useStripHidden } from '../components/FieldStrip';
 import { GuideLink } from '../components/Guide';
 
 /** Width of the command-name column: wider panels give long command names more room. */
@@ -153,6 +153,28 @@ function nextRunStart(lay: Layout, name: string, dir: 1 | -1): number | null {
   return best;
 }
 
+/** Where the command list comes from: found by name (shown faintly), or a text-list field dropped or typed here. */
+export function CommandsSource({ id }: { id: string }) {
+  const sourceKey = useStore(panelStore, (s) => (s.panels[id] as CommandsSettings | undefined)?.sourceKey);
+  const logs = useStore(sessionStore, (s) => s.logs);
+  const autoSource = logs
+    .filter((l) => l.visible)
+    .map((l) => sourceFor(l, undefined))
+    .find(Boolean);
+  return (
+    <FieldSlot
+      inline
+      spec={COMMAND_LIST}
+      value={sourceKey ?? (autoSource?.kind === 'names' ? autoSource.key : undefined)}
+      placeholder={autoSource?.kind === 'booleans' ? <KeyText k={autoSource.prefix} /> : undefined}
+      panel={id}
+      onPick={(key) => updatePanel<CommandsSettings>(id, { sourceKey: key })}
+      onClear={sourceKey ? () => updatePanel<CommandsSettings>(id, { sourceKey: undefined }) : undefined}
+      testId="commands-source"
+    />
+  );
+}
+
 export function CommandsPanel({ id }: { id: string }) {
   const settings = useStore(panelStore, (s) => s.panels[id] as CommandsSettings);
   const logs = useStore(sessionStore, (s) => s.logs.filter((l) => l.visible));
@@ -163,7 +185,7 @@ export function CommandsPanel({ id }: { id: string }) {
   const L = layout(settings);
   const height = L.headH + L.names.length * L.rowH + AXIS_H;
   const anySource = logs.some((l) => sourceFor(l, settings.sourceKey));
-  const autoSource = logs.map((l) => sourceFor(l, undefined)).find(Boolean);
+  const stripHidden = useStripHidden(id);
   const hostRef = useRef<HTMLDivElement>(null);
 
   // hit testing: highlight and tooltip on hover; a run jumps to its start, a name to the next run
@@ -238,18 +260,11 @@ export function CommandsPanel({ id }: { id: string }) {
 
   return (
     <div className="panel commands-panel">
-      <StripRow>
-        <FieldSlot
-          inline
-          spec={COMMAND_LIST}
-          value={settings.sourceKey ?? (autoSource?.kind === 'names' ? autoSource.key : undefined)}
-          placeholder={autoSource?.kind === 'booleans' ? <KeyText k={autoSource.prefix} /> : undefined}
-          panel={id}
-          onPick={(key) => updatePanel<CommandsSettings>(id, { sourceKey: key })}
-          onClear={settings.sourceKey ? () => updatePanel<CommandsSettings>(id, { sourceKey: undefined }) : undefined}
-          testId="commands-source"
-        />
-      </StripRow>
+      {!stripHidden && (
+        <StripRow>
+          <CommandsSource id={id} />
+        </StripRow>
+      )}
       <Toolbar>
         <ToolInput
           low

@@ -869,7 +869,11 @@ async function main() {
     const gid = newGraph;
     const n = await state<number>(page, `s.gridStore.get().order.indexOf('${gid}') + 1`);
     const rowNums = await fieldRow('/Shooter/SupplyCurrentAmps').last().locator('[data-testid=row-panels] .pn').allInnerTexts();
-    check('a field in the list shows the numbers of the panels it is in', n > 0 && rowNums.includes(String(n)), `${n} | ${rowNums.join(',')}`);
+    check(
+      'a field in the list shows the numbers of the panels it is in',
+      n > 0 && rowNums.includes(String(n)),
+      `${n} | ${rowNums.join(',')} | rows ${await fieldRow('/Shooter/SupplyCurrentAmps').count()} | order ${(await state<string[]>(page, 's.gridStore.get().order')).join(',')} | series ${(await seriesOf(gid)).join(',')}`,
+    );
     // bring the graph to the front of its area (Statistics was added after it)
     const front = async (id: string) => {
       const k = await state<number>(page, `s.gridStore.get().order.indexOf('${id}') + 1`);
@@ -990,10 +994,43 @@ async function main() {
       '...and the field list and inspector step aside',
       (await page.locator('[data-testid=field-tree]').isHidden()) && (await page.locator('.inspector').count()) === 0,
     );
+    check(
+      '...and so do the panels’ strips: In panels edits their fields',
+      (await state<number>(page, 'document.querySelectorAll(".dv-groupview .field-strip").length')) === 0,
+    );
+    await front(gid);
+    await page.waitForTimeout(200);
+    const sec = page.locator(`[data-testid=ip-section][data-panel="${gid}"]`);
+    const ipRow = (k: string) => sec.locator(`[data-testid=ip-row][data-key="${k}"]`);
+    await ipRow('/Intake/SupplyCurrentAmps').hover();
+    await ipRow('/Intake/SupplyCurrentAmps').locator('[data-testid=ip-remove]').click();
+    await page.waitForTimeout(200);
+    const removed = !(await seriesOf(gid)).includes('/Intake/SupplyCurrentAmps');
+    await sec.locator('[data-testid=ip-add-add]').click();
+    await page.keyboard.type('Intake/Sup');
+    await page.waitForTimeout(150);
+    await page.keyboard.press('Tab');
+    await page.waitForTimeout(200);
+    check(
+      'In panels: a row’s remove button and + Field edit the panel',
+      removed && (await seriesOf(gid)).includes('/Intake/SupplyCurrentAmps'),
+      (await seriesOf(gid)).join(','),
+    );
+    // two rows both in view (a short section can't scroll while a test drags)
+    const [k0, k1] = await sec
+      .locator('[data-testid=ip-row]')
+      .evaluateAll((els) => els.slice(0, 2).map((e) => (e as unknown as { dataset: { key: string } }).dataset.key));
+    await ipRow(k1).dragTo(ipRow(k0), { targetPosition: { x: 40, y: 2 } });
+    await page.waitForTimeout(300);
+    const moved = await seriesOf(gid);
+    check('...and dragging a row onto another’s top edge moves it there', moved.indexOf(k1) === moved.indexOf(k0) - 1, `${k0} ${k1} | ${moved.join(',')}`);
     await page.screenshot({ path: resolve(outDir, 'ui-in-panels.png') });
     await page.locator('[data-testid=in-panels-toggle]').click();
     await page.waitForTimeout(200);
-    check('switching it off brings the field list back', await page.locator('[data-testid=field-tree]').isVisible());
+    check(
+      'switching it off brings the field list and the strips back',
+      (await page.locator('[data-testid=field-tree]').isVisible()) && (await page.locator(`[data-panel="${gid}"] .field-strip`).isVisible()),
+    );
   }
 
   console.log('Power by subsystem');
